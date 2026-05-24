@@ -1,9 +1,9 @@
-# Blackout Secure Discover Upstream Release
+# Blackout Secure Upstream Watcher
 
 **Copyright © 2025-2026 Blackout Secure | Apache License 2.0**
 
-[![Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-blue?logo=github)](https://github.com/marketplace/actions/blackout-secure-discover-upstream-release)
-[![GitHub release](https://img.shields.io/github/v/release/blackoutsecure/bos-discover-upstream-release?sort=semver)](https://github.com/blackoutsecure/bos-discover-upstream-release/releases)
+[![Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-blue?logo=github)](https://github.com/marketplace/actions/blackout-secure-upstream-watcher)
+[![GitHub release](https://img.shields.io/github/v/release/blackoutsecure/bos-upstream-watcher?sort=semver)](https://github.com/blackoutsecure/bos-upstream-watcher/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 Detect the latest version of an upstream project from a pluggable set of
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: discover
-        uses: blackoutsecure/bos-discover-upstream-release@v1
+        uses: blackoutsecure/bos-upstream-watcher@v1
         with:
           source: github_release
           upstream_repo: nginx/nginx
@@ -81,7 +81,7 @@ name and the underlying commit SHA (works for lightweight and annotated
 tags).
 
 ```yaml
-- uses: blackoutsecure/bos-discover-upstream-release@v1
+- uses: blackoutsecure/bos-upstream-watcher@v1
   with:
     source: github_release
     upstream_repo: nginx/nginx
@@ -95,7 +95,7 @@ ship versions on a `dev` / `main` branch instead of cutting Releases
 version from structured files like `debian/changelog`.
 
 ```yaml
-- uses: blackoutsecure/bos-discover-upstream-release@v1
+- uses: blackoutsecure/bos-upstream-watcher@v1
   with:
     source: github_branch_file
     upstream_repo: wiedehopf/readsb
@@ -106,7 +106,7 @@ version from structured files like `debian/changelog`.
 With a regex extraction:
 
 ```yaml
-- uses: blackoutsecure/bos-discover-upstream-release@v1
+- uses: blackoutsecure/bos-upstream-watcher@v1
   with:
     source: github_branch_file
     upstream_repo: flightaware/dump978
@@ -120,7 +120,7 @@ With a regex extraction:
 Lists `repos/{owner}/{name}/tags` and picks the highest SemVer match.
 
 ```yaml
-- uses: blackoutsecure/bos-discover-upstream-release@v1
+- uses: blackoutsecure/bos-upstream-watcher@v1
   with:
     source: github_tags
     upstream_repo: kubernetes/kubernetes
@@ -132,7 +132,7 @@ Lists `repos/{owner}/{name}/tags` and picks the highest SemVer match.
 Polls Docker Hub for the highest SemVer tag of an image.
 
 ```yaml
-- uses: blackoutsecure/bos-discover-upstream-release@v1
+- uses: blackoutsecure/bos-upstream-watcher@v1
   with:
     source: container_image
     image_ref: docker.io/library/nginx
@@ -147,7 +147,7 @@ Polls Docker Hub for the highest SemVer tag of an image.
 Reads `registry.npmjs.org/{pkg}/latest`. Scoped names are supported.
 
 ```yaml
-- uses: blackoutsecure/bos-discover-upstream-release@v1
+- uses: blackoutsecure/bos-upstream-watcher@v1
   with:
     source: npm
     package_name: '@actions/core'
@@ -158,7 +158,7 @@ Reads `registry.npmjs.org/{pkg}/latest`. Scoped names are supported.
 Reads `pypi.org/pypi/{pkg}/json`.
 
 ```yaml
-- uses: blackoutsecure/bos-discover-upstream-release@v1
+- uses: blackoutsecure/bos-upstream-watcher@v1
   with:
     source: pypi
     package_name: requests
@@ -170,7 +170,7 @@ Fetches an arbitrary URL and extracts a version via regex. Useful for
 project websites and unstructured endpoints.
 
 ```yaml
-- uses: blackoutsecure/bos-discover-upstream-release@v1
+- uses: blackoutsecure/bos-upstream-watcher@v1
   with:
     source: generic_url
     version_url: https://nginx.org/en/download.html
@@ -205,7 +205,7 @@ project websites and unstructured endpoints.
 | `strip_v_prefix` | `true` | Strip a leading `v` from the resolved version. |
 | `tracker_path` | `.github/upstream/tracked-release.json` | Where the tracker JSON is written. Empty disables the file. |
 | `github_token` | `${{ github.token }}` | Token for authenticated GitHub REST calls. |
-| `user_agent` | `bos-discover-upstream-release/<version>` | Override the outbound `User-Agent` header. |
+| `user_agent` | `bos-upstream-watcher/<version>` | Override the outbound `User-Agent` header. |
 
 ## 📤 Outputs
 
@@ -380,7 +380,7 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
 
 ## 💬 Support
 
-- **Issues**: [GitHub Issues](https://github.com/blackoutsecure/bos-discover-upstream-release/issues)
+- **Issues**: [GitHub Issues](https://github.com/blackoutsecure/bos-upstream-watcher/issues)
 - **Security**: see [SECURITY.md](SECURITY.md)
 - **Sponsor**: [GitHub Sponsors](https://github.com/sponsors/blackoutsecure)
 

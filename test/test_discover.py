@@ -166,7 +166,7 @@ class TestUserAgent:
     def test_default(self, monkeypatch):
         monkeypatch.delenv("USER_AGENT_OVERRIDE", raising=False)
         ua = discover._user_agent()
-        assert ua.startswith("bos-discover-upstream-release/")
+        assert ua.startswith("bos-upstream-watcher/")
 
     def test_override(self, monkeypatch):
         monkeypatch.setenv("USER_AGENT_OVERRIDE", "my-bot/0.1")
@@ -292,6 +292,6 @@ class TestActionYaml:
         assert action.exists()
         body = action.read_text(encoding="utf-8")
         assert "branding:" in body
-        assert "name: 'Blackout Secure Discover Upstream Release'" in body
+        assert "name: 'Blackout Secure Upstream Watcher'" in body
         assert "using: composite" in body
         assert 'python3 "${GITHUB_ACTION_PATH}/src/discover.py"' in body

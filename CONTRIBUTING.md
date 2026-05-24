@@ -1,4 +1,4 @@
-# Contributing to Blackout Secure Discover Upstream Release
+# Contributing to Blackout Secure Upstream Watcher
 
 Thank you for your interest in contributing.
 
@@ -6,7 +6,7 @@ Thank you for your interest in contributing.
 
 1. Fork the repository
 2. Clone your fork:
-   `git clone https://github.com/your-username/bos-discover-upstream-release.git`
+   `git clone https://github.com/your-username/bos-upstream-watcher.git`
 3. Create a feature branch: `git checkout -b feat/your-feature`
 4. (Optional) Create a venv: `python3 -m venv .venv && source .venv/bin/activate`
 5. Install dev tooling: `pip install -r requirements-dev.txt`

@@ -1,10 +1,10 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Blackout Secure Discover Upstream Release
+# Blackout Secure Upstream Watcher
 # Copyright © 2025-2026 Blackout Secure
 # Licensed under Apache License 2.0
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-name: 'Blackout Secure Discover Upstream Release'
+name: 'Blackout Secure Upstream Watcher'
 description: >-
   Detect the latest version of an upstream project from GitHub Releases,
   branch HEAD, tags, npm, PyPI, container registries, or any URL, and
@@ -99,7 +99,7 @@ inputs:
   user_agent:
     description: >-
       Custom `User-Agent` header sent on outbound HTTP requests.
-      Defaults to `bos-discover-upstream-release/<version>`.
+      Defaults to `bos-upstream-watcher/<version>`.
     required: false
     default: ''
 

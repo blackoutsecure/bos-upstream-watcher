@@ -29,7 +29,7 @@ DEFAULT_TAG_PATTERN = r"^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$"
 
 
 def _user_agent() -> str:
-    return os.environ.get("USER_AGENT_OVERRIDE") or f"bos-discover-upstream-release/{__version__}"
+    return os.environ.get("USER_AGENT_OVERRIDE") or f"bos-upstream-watcher/{__version__}"
 
 
 # ---------------------------------------------------------------------------

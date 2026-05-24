@@ -4,8 +4,8 @@
 
 **Do not open public GitHub issues for security vulnerabilities.**
 
-If you discover a security vulnerability in Blackout Secure Discover Upstream
-Release, please report it by emailing security@blackoutsecure.app.
+If you discover a security vulnerability in Blackout Secure Upstream
+Watcher, please report it by emailing security@blackoutsecure.app.
 
 Please include:
 
@@ -23,13 +23,13 @@ We acknowledge all security reports within 48 hours.
 1. **Pin to a major version tag**, never to `main`:
 
    ```yaml
-   - uses: blackoutsecure/bos-discover-upstream-release@v1
+   - uses: blackoutsecure/bos-upstream-watcher@v1
    ```
 
    For audit-grade pinning, use the commit SHA:
 
    ```yaml
-   - uses: blackoutsecure/bos-discover-upstream-release@<full-sha>  # v1.0.0
+   - uses: blackoutsecure/bos-upstream-watcher@<full-sha>  # v1.0.0
    ```
 
 2. **Scope the GitHub token**. For polling a private upstream repository,
