@@ -63,7 +63,10 @@ python3 src/discover.py
 
 - Use GitHub Issues for bug reports.
 - Include the `source:` value, sanitized inputs, and the failing run URL.
-- For security issues, see [SECURITY.md](./SECURITY.md).
+- For security issues, follow the organization-wide
+  [Security Policy](https://github.com/blackoutsecure/.github/blob/main/SECURITY.md)
+  and report privately via
+  [GitHub Security Advisories](https://github.com/blackoutsecure/bos-upstream-watcher/security/advisories/new).
 
 ## License
 
