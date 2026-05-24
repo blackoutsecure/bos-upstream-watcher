@@ -5,6 +5,7 @@
 [![Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-blue?logo=github)](https://github.com/marketplace/actions/blackout-secure-upstream-watcher)
 [![GitHub release](https://img.shields.io/github/v/release/blackoutsecure/bos-upstream-watcher?sort=semver)](https://github.com/blackoutsecure/bos-upstream-watcher/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![Made by BlackoutSecure](https://img.shields.io/badge/made%20by-BlackoutSecure-1f1f1f)](https://github.com/blackoutsecure)
 
 Detect the latest version of an upstream project from a pluggable set of
 sources and report whether it changed since the last run. Designed for the
@@ -432,7 +433,7 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
 ## 💬 Support
 
 - **Issues**: [GitHub Issues](https://github.com/blackoutsecure/bos-upstream-watcher/issues)
-- **Security**: see [SECURITY.md](SECURITY.md)
+- **Security**: see the organization-wide [Security Policy](https://github.com/blackoutsecure/.github/blob/main/SECURITY.md) and report via [GitHub Security Advisories](https://github.com/blackoutsecure/bos-upstream-watcher/security/advisories/new)
 - **Sponsor**: [GitHub Sponsors](https://github.com/sponsors/blackoutsecure)
 
 ## 🔗 Related

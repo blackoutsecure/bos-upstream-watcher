@@ -1,0 +1,45 @@
+version: 2
+updates:
+
+# >>> bos-automation-hub:dependabot_actions >>>
+# Managed by https://github.com/blackoutsecure/bos-automation-hub — do not edit between markers.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: scope
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      docker-actions:
+        patterns:
+          - "docker/*"
+      github-actions:
+        patterns:
+          - "actions/*"
+# <<< bos-automation-hub:dependabot_actions <<<
+
+# >>> bos-automation-hub:dependabot_pip >>>
+# Managed by https://github.com/blackoutsecure/bos-automation-hub — do not edit between markers.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: scope
+    labels:
+      - dependencies
+      - python
+# <<< bos-automation-hub:dependabot_pip <<<

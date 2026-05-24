@@ -1,0 +1,14 @@
+# >>> bos-automation-hub:lf_line_endings >>>
+# Managed by https://github.com/blackoutsecure/bos-automation-hub — do not edit between markers.
+# Normalize all text files to LF on checkout and in the index.
+* text=auto eol=lf
+
+# Explicit binary types (defensive — git usually auto-detects).
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
+# <<< bos-automation-hub:lf_line_endings <<<
