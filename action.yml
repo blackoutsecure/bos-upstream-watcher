@@ -6,9 +6,8 @@
 
 name: 'Blackout Secure Upstream Watcher'
 description: >-
-  Detect the latest version of an upstream project from GitHub Releases,
-  branch HEAD, tags, npm, PyPI, container registries, or any URL, and
-  report whether it changed since the last run.
+  Detect upstream version changes from GitHub Releases, branch HEAD,
+  tags, npm, PyPI, container registries, or any URL.
 author: 'Blackout Secure'
 
 branding:
