@@ -18,9 +18,9 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NamedTuple
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # Default tag/version filter (SemVer with optional `v` prefix and pre-release
 # / build metadata). Used by github_tags and container_image when the caller
@@ -42,10 +42,14 @@ def die(msg: str) -> None:
     sys.exit(1)
 
 
-def http_get(
+def http_request(
     url: str, *, headers: dict[str, str] | None = None, accept_json: bool = False
-) -> tuple[int, bytes]:
-    """GET `url` with a 3-retry loop on 5xx and connection errors."""
+) -> tuple[int, bytes, dict[str, str]]:
+    """GET `url` with a 3-retry loop on 5xx and connection errors.
+    Returns `(status, body, response_headers)`. Response headers are
+    lowercased so callers can look them up case-insensitively (e.g. for
+    OCI Distribution `Link:` pagination).
+    """
     req_headers = {"User-Agent": _user_agent()}
     if accept_json:
         req_headers["Accept"] = "application/json"
@@ -57,18 +61,34 @@ def http_get(
         req = urllib.request.Request(url, headers=req_headers)  # noqa: S310
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
-                return resp.status, resp.read()
+                resp_headers = {k.lower(): v for k, v in resp.headers.items()}
+                return resp.status, resp.read(), resp_headers
         except urllib.error.HTTPError as exc:
             if exc.code < 500:
                 # 4xx is terminal — retrying won't help.
-                return exc.code, exc.read() or b""
+                err_headers = (
+                    {k.lower(): v for k, v in exc.headers.items()} if exc.headers else {}
+                )
+                return exc.code, exc.read() or b"", err_headers
             last_err = exc
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             last_err = exc
         if attempt < 3:
             time.sleep(2 * attempt)
     die(f"GET {url} failed after 3 attempts: {last_err}")
-    return 0, b""  # unreachable — die() exits
+    return 0, b"", {}  # unreachable — die() exits
+
+
+# OCI Distribution-style pagination uses an RFC 5988 `Link: <url>; rel="next"`
+# header. Minimal parser — returns the `next` URL or None.
+_LINK_NEXT_RE = re.compile(r'<([^>]+)>\s*;\s*rel="?next"?', re.IGNORECASE)
+
+
+def _parse_link_next(link_header: str) -> str | None:
+    if not link_header:
+        return None
+    m = _LINK_NEXT_RE.search(link_header)
+    return m.group(1) if m else None
 
 
 def gh_api(path: str) -> Any:
@@ -81,7 +101,7 @@ def gh_api(path: str) -> Any:
     token = os.environ.get("GH_TOKEN", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    status, body = http_get(url, headers=headers, accept_json=True)
+    status, body, _ = http_request(url, headers=headers, accept_json=True)
     if status >= 400:
         snippet = body[:400].decode("utf-8", "replace")
         hint = ""
@@ -102,12 +122,30 @@ def gh_api(path: str) -> Any:
     return json.loads(body)
 
 
-def write_outputs(pairs: dict[str, str]) -> None:
+def write_outputs(pairs: dict[str, str], *, multiline_keys: frozenset[str] = frozenset()) -> None:
+    """Append `pairs` to `$GITHUB_OUTPUT`.
+
+    Single-line values use `key=value`. Values whose key is in `multiline_keys`
+    are emitted using GitHub's heredoc syntax so newlines are preserved
+    intact. Single-line keys that contain a newline are rejected — prevents
+    injection-via-newline into adjacent keys. This is the SINGLE source of
+    truth for output validation; callers that build the pairs dict don't
+    need to re-validate.
+    """
     out = os.environ.get("GITHUB_OUTPUT")
     if not out:
         die("GITHUB_OUTPUT is not set (are we running outside GitHub Actions?)")
     with open(out, "a", encoding="utf-8") as f:
         for k, v in pairs.items():
+            if k in multiline_keys:
+                # Pick a delimiter that does not appear in the value, even
+                # adversarially. Base delimiter is namespaced; extend with
+                # suffix bytes only if a collision is detected.
+                delim = "BOS_UPSTREAM_EOF"
+                while delim in v:
+                    delim += "_X"
+                f.write(f"{k}<<{delim}\n{v}\n{delim}\n")
+                continue
             if "\n" in v or "\r" in v:
                 die(f"output '{k}' contains a newline (value={v!r})")
             f.write(f"{k}={v}\n")
@@ -176,6 +214,14 @@ def _validate_owner_repo(repo: str) -> None:
         die(f"input 'upstream_repo' must be 'owner/name' (got {repo!r})")
 
 
+def _require_repo(env: dict[str, str]) -> str:
+    """Read + validate the `UPSTREAM_REPO` env var. Used by every provider
+    that targets a GitHub repo."""
+    repo = _require("UPSTREAM_REPO", env["UPSTREAM_REPO"])
+    _validate_owner_repo(repo)
+    return repo
+
+
 def _strip_v(version: str, strip: bool) -> str:
     return version[1:] if strip and version.startswith("v") else version
 
@@ -196,14 +242,60 @@ def _normalize_semver(version: str) -> str:
     return ".".join(parts) + (m["suffix"] or "")
 
 
+def _select_release_with_prereleases(repo: str, pattern: str) -> dict[str, Any]:
+    """List releases (including pre-releases), filter by `pattern`, pick the
+    highest by SemVer order. Draft releases are skipped. Paginates up to 5
+    pages of 100 releases (matches the github_tags limit).
+    """
+    releases: list[dict[str, Any]] = []
+    for page in range(1, 6):
+        chunk = gh_api(f"repos/{repo}/releases?per_page=100&page={page}")
+        if not isinstance(chunk, list) or not chunk:
+            break
+        releases.extend(chunk)
+        if len(chunk) < 100:
+            break
+
+    if not releases:
+        die(f"{repo} has no releases")
+
+    try:
+        regex = re.compile(pattern)
+    except re.error as exc:
+        die(f"input 'tag_pattern' is not a valid regex: {exc}")
+
+    matched = [
+        r
+        for r in releases
+        if not r.get("draft") and r.get("tag_name") and regex.match(r["tag_name"])
+    ]
+    if not matched:
+        die(
+            f"no releases matched pattern {pattern!r} "
+            f"(saw {len(releases)} releases including pre-releases)"
+        )
+
+    matched.sort(key=lambda r: semver_key(r["tag_name"]))
+    return matched[-1]
+
+
 def provider_github_release(env: dict[str, str]) -> dict[str, Any]:
     repo = _require("UPSTREAM_REPO", env["UPSTREAM_REPO"])
     _validate_owner_repo(repo)
 
-    rel = gh_api(f"repos/{repo}/releases/latest")
+    if env.get("INCLUDE_PRERELEASES") == "true":
+        # Caller opted into pre-release tracking: enumerate `/releases`
+        # (which DOES include pre-releases, unlike `/releases/latest`),
+        # filter by tag_pattern, and pick the highest by SemVer order.
+        pattern = env["TAG_PATTERN"] or DEFAULT_TAG_PATTERN
+        rel = _select_release_with_prereleases(repo, pattern)
+    else:
+        # Default: trust the upstream's own "latest" pointer.
+        rel = gh_api(f"repos/{repo}/releases/latest")
+
     tag = rel.get("tag_name") or ""
     if not tag:
-        die(f"upstream {repo} has no latest-release tag_name")
+        die(f"upstream {repo} has no tag_name in the selected release")
 
     # `commits/<tag>` resolves both lightweight and annotated tags to the
     # underlying commit SHA in a single call. The Git Refs API would return
@@ -220,6 +312,11 @@ def provider_github_release(env: dict[str, str]) -> dict[str, Any]:
         "version": version,
         "commit": commit,
         "source_url": f"https://github.com/{repo}/releases/tag/{tag}",
+        "label": repo,
+        "release_url": rel.get("html_url") or f"https://github.com/{repo}/releases/tag/{tag}",
+        "release_name": rel.get("name") or "",
+        "release_body": rel.get("body") or "",
+        "published_at": rel.get("published_at") or "",
         "tracker": tracker,
     }
 
@@ -236,7 +333,7 @@ def provider_github_branch_file(env: dict[str, str]) -> dict[str, Any]:
         die(f"input 'version_file_path' must be repo-relative: {path!r}")
 
     url = f"https://raw.githubusercontent.com/{repo}/{branch}/{path}"
-    status, body = http_get(url)
+    status, body, _ = http_request(url)
     if status >= 400:
         die(f"could not read {url} (HTTP {status})")
     body_text = body.decode("utf-8", "replace")
@@ -281,13 +378,13 @@ def provider_github_branch_file(env: dict[str, str]) -> dict[str, Any]:
         "version": version,
         "commit": commit,
         "source_url": url,
+        "label": repo,
         "tracker": tracker,
     }
 
 
 def provider_github_tags(env: dict[str, str]) -> dict[str, Any]:
-    repo = _require("UPSTREAM_REPO", env["UPSTREAM_REPO"])
-    _validate_owner_repo(repo)
+    repo = _require_repo(env)
     pattern = env["TAG_PATTERN"] or DEFAULT_TAG_PATTERN
 
     # Paginate up to 5 pages of 100 tags each (sufficient for any reasonable
@@ -326,61 +423,212 @@ def provider_github_tags(env: dict[str, str]) -> dict[str, Any]:
         "version": version,
         "commit": commit,
         "source_url": f"https://github.com/{repo}/releases/tag/{chosen}",
+        "label": repo,
         "tracker": tracker,
     }
 
 
-def provider_container_image(env: dict[str, str]) -> dict[str, Any]:
-    image_ref = _require("IMAGE_REF", env["IMAGE_REF"])
-    pattern = env["TAG_PATTERN"] or DEFAULT_TAG_PATTERN
+# ---------------------------------------------------------------------------
+# container_image — multi-registry helpers
+# ---------------------------------------------------------------------------
 
-    # Accept `docker.io/<ns>/<img>` and bare `<ns>/<img>` (assumed docker.io).
-    # Other registries (ghcr.io, mcr.microsoft.com, etc.) are out of scope
-    # in this revision — bearer-token bootstrap differs per registry.
-    ref = image_ref
-    if ref.startswith("docker.io/"):
-        ref = ref[len("docker.io/") :]
-    elif "/" not in ref:
-        die(f"input 'image_ref' must be 'namespace/image' (got {image_ref!r})")
-    elif "." in ref.split("/")[0] or ":" in ref.split("/")[0]:
-        die(f"input 'image_ref' only supports docker.io in this revision (got {image_ref!r})")
 
-    # `library/<name>` is the canonical Docker Hub path for official images.
-    if ref.count("/") == 0:
-        ref = f"library/{ref}"
-    ns, _, name = ref.partition("/")
-    if not ns or not name:
-        die(f"could not parse namespace/image from {image_ref!r}")
+def _split_two_segments(path: str, registry: str, image_ref: str) -> tuple[str, str]:
+    if path.count("/") != 1 or "" in path.split("/"):
+        die(
+            f"input 'image_ref' for {registry} must be '{registry}/<namespace>/<image>' "
+            f"(got {image_ref!r})"
+        )
+    ns, _, name = path.partition("/")
+    return ns, name
 
+
+def _list_dockerhub_tags(ns: str, name: str) -> list[str]:
     all_tags: list[str] = []
-    next_url: str | None = f"https://hub.docker.com/v2/repositories/{ns}/{name}/tags/?page_size=100"
+    next_url: str | None = (
+        f"https://hub.docker.com/v2/repositories/{ns}/{name}/tags/?page_size=100"
+    )
     pages = 0
     while next_url and pages < 5:
-        status, body = http_get(next_url, accept_json=True)
+        status, body, _ = http_request(next_url, accept_json=True)
         if status >= 400:
             die(f"Docker Hub returned {status} for {next_url}")
         data = json.loads(body)
         all_tags.extend(t["name"] for t in data.get("results", []) if "name" in t)
         next_url = data.get("next")
         pages += 1
+    return all_tags
+
+
+def _list_ghcr_tags(owner: str, image: str) -> list[str]:
+    """List tags via the OCI Distribution API. Public images only — private
+    images require a PAT with `read:packages` scope, deferred to a future
+    revision.
+    """
+    # GHCR's anonymous bearer-token endpoint issues a scoped token for the
+    # requested repo. For PRIVATE repos it returns 200 with an unscoped
+    # token that fails on /v2 (giving us a 401 to diagnose), so the token
+    # call itself doesn't need a special-case.
+    token_url = (
+        f"https://ghcr.io/token?service=ghcr.io"
+        f"&scope=repository:{owner}/{image}:pull"
+    )
+    status, body, _ = http_request(token_url, accept_json=True)
+    if status >= 400:
+        die(f"GHCR token endpoint returned {status} for {owner}/{image}")
+    try:
+        token = json.loads(body).get("token", "")
+    except json.JSONDecodeError as exc:
+        die(f"GHCR token endpoint returned non-JSON for {owner}/{image}: {exc}")
+    if not token:
+        die(f"GHCR did not issue a bearer token for {owner}/{image}")
+
+    all_tags: list[str] = []
+    next_url: str | None = f"https://ghcr.io/v2/{owner}/{image}/tags/list?n=100"
+    pages = 0
+    auth_header = {"Authorization": f"Bearer {token}"}
+    while next_url and pages < 5:
+        status, body, headers = http_request(next_url, headers=auth_header, accept_json=True)
+        if status == 401:
+            die(
+                f"GHCR returned 401 for {owner}/{image} — image may be private. "
+                f"Private GHCR images are not yet supported by this action."
+            )
+        if status == 404:
+            die(f"GHCR image not found: ghcr.io/{owner}/{image}")
+        if status >= 400:
+            die(f"GHCR returned {status} for {next_url}")
+        data = json.loads(body)
+        all_tags.extend(data.get("tags") or [])
+        # OCI Distribution pagination via RFC 5988 Link header. The `next`
+        # URL is path-only (relative to the registry root).
+        nxt = _parse_link_next(headers.get("link", ""))
+        if nxt and nxt.startswith("/"):
+            nxt = f"https://ghcr.io{nxt}"
+        next_url = nxt
+        pages += 1
+    return all_tags
+
+
+def _list_quay_tags(ns: str, name: str) -> list[str]:
+    """List tags via Quay's v1 REST API (not OCI-compatible). Public
+    repositories only; private repos require an `Authorization: Bearer`
+    header that is deferred to a future revision.
+    """
+    all_tags: list[str] = []
+    page = 1
+    while page <= 5:
+        url = (
+            f"https://quay.io/api/v1/repository/{ns}/{name}/tag/"
+            f"?onlyActiveTags=true&limit=100&page={page}"
+        )
+        status, body, _ = http_request(url, accept_json=True)
+        if status == 404:
+            die(f"Quay repository not found: quay.io/{ns}/{name}")
+        if status in (401, 403):
+            die(
+                f"Quay returned {status} for {ns}/{name} — repository may be private. "
+                f"Private Quay repos are not yet supported by this action."
+            )
+        if status >= 400:
+            die(f"Quay returned {status} for {url}")
+        data = json.loads(body)
+        chunk = data.get("tags") or []
+        all_tags.extend(t["name"] for t in chunk if "name" in t)
+        if not data.get("has_additional"):
+            break
+        page += 1
+    return all_tags
+
+
+class _RegistryConfig(NamedTuple):
+    """Per-registry config consumed by `provider_container_image`. Adding a
+    new registry = one entry in `_REGISTRIES` + one lister function above."""
+
+    normalize_path: Callable[[str], str]
+    list_tags: Callable[[str, str], list[str]]
+    source_url: Callable[[str, str], str]
+
+
+_REGISTRIES: dict[str, _RegistryConfig] = {
+    "docker.io": _RegistryConfig(
+        # Bare image names map to `library/<name>` on Docker Hub.
+        normalize_path=lambda p: p if "/" in p else f"library/{p}",
+        list_tags=_list_dockerhub_tags,
+        source_url=lambda ns, name: f"https://hub.docker.com/r/{ns}/{name}/tags",
+    ),
+    "ghcr.io": _RegistryConfig(
+        normalize_path=lambda p: p,
+        list_tags=_list_ghcr_tags,
+        # GitHub's container package URL uses the IMAGE name, not the owner.
+        source_url=lambda owner, image: f"https://github.com/{owner}/{image}/pkgs/container/{image}",
+    ),
+    "quay.io": _RegistryConfig(
+        normalize_path=lambda p: p,
+        list_tags=_list_quay_tags,
+        source_url=lambda ns, name: f"https://quay.io/repository/{ns}/{name}?tab=tags",
+    ),
+}
+
+
+def _parse_image_ref(image_ref: str) -> tuple[str, str]:
+    """Split `image_ref` into `(registry_host, path)`.
+
+    Examples:
+      `nginx`                            -> (`docker.io`, `nginx`)
+      `library/nginx`                    -> (`docker.io`, `library/nginx`)
+      `docker.io/library/nginx`          -> (`docker.io`, `library/nginx`)
+      `ghcr.io/blackoutsecure/runner`    -> (`ghcr.io`, `blackoutsecure/runner`)
+      `quay.io/prometheus/node-exporter` -> (`quay.io`, `prometheus/node-exporter`)
+      `gcr.io/foo/bar`                   -> die (unsupported registry)
+
+    The heuristic for "is the first segment a registry host?" matches the
+    OCI spec: a registry host contains a `.` or `:` (port). Bare names and
+    `<namespace>/<image>` are treated as Docker Hub.
+    """
+    for prefix in _REGISTRIES:
+        if image_ref.startswith(f"{prefix}/"):
+            return prefix, image_ref[len(prefix) + 1 :]
+
+    first = image_ref.split("/", 1)[0]
+    if "." in first or ":" in first:
+        die(
+            f"input 'image_ref' uses an unsupported registry "
+            f"(got {image_ref!r}; supported: {', '.join(_REGISTRIES)})"
+        )
+
+    # Bare name or `ns/name` — assume Docker Hub.
+    return "docker.io", image_ref
+
+
+def provider_container_image(env: dict[str, str]) -> dict[str, Any]:
+    image_ref = _require("IMAGE_REF", env["IMAGE_REF"])
+    pattern = env["TAG_PATTERN"] or DEFAULT_TAG_PATTERN
+
+    registry, path = _parse_image_ref(image_ref)
+    cfg = _REGISTRIES[registry]  # _parse_image_ref already gated this
+
+    path = cfg.normalize_path(path)
+    ns, name = _split_two_segments(path, registry, image_ref)
+    all_tags = cfg.list_tags(ns, name)
+    canonical = f"{registry}/{ns}/{name}"
 
     if not all_tags:
-        die(f"no tags found at hub.docker.com/{ns}/{name}")
+        die(f"no tags found for {canonical}")
 
     chosen = pick_highest(all_tags, pattern)
     version = _strip_v(chosen, env["STRIP_V_PREFIX"] == "true")
-    tracker = {
-        "image": f"docker.io/{ns}/{name}",
-        "source": "container_image",
-        "tag": chosen,
-        "version": version,
-    }
     return {
         "tag": chosen,
         "version": version,
-        "commit": "",
-        "source_url": f"https://hub.docker.com/r/{ns}/{name}/tags",
-        "tracker": tracker,
+        "source_url": cfg.source_url(ns, name),
+        "label": canonical,
+        "tracker": {
+            "image": canonical,
+            "source": "container_image",
+            "tag": chosen,
+            "version": version,
+        },
     }
 
 
@@ -393,7 +641,7 @@ def provider_npm(env: dict[str, str]) -> dict[str, Any]:
     # The npm registry expects `@scope%2Fname` for the path component.
     safe = pkg.replace("/", "%2F") if pkg.startswith("@") else pkg
     url = f"https://registry.npmjs.org/{safe}/latest"
-    status, body = http_get(url, accept_json=True)
+    status, body, _ = http_request(url, accept_json=True)
     if status >= 400:
         die(f"npm registry returned {status} for {url}")
     data = json.loads(body)
@@ -402,13 +650,12 @@ def provider_npm(env: dict[str, str]) -> dict[str, Any]:
         die(f"no version in {url}")
 
     version = _strip_v(version, env["STRIP_V_PREFIX"] == "true")
-    tracker = {"package": pkg, "source": "npm", "version": version}
     return {
         "tag": version,
         "version": version,
-        "commit": "",
         "source_url": url,
-        "tracker": tracker,
+        "label": pkg,
+        "tracker": {"package": pkg, "source": "npm", "version": version},
     }
 
 
@@ -418,7 +665,7 @@ def provider_pypi(env: dict[str, str]) -> dict[str, Any]:
         die(f"input 'package_name' is not a valid PyPI package name: {pkg!r}")
 
     url = f"https://pypi.org/pypi/{pkg}/json"
-    status, body = http_get(url, accept_json=True)
+    status, body, _ = http_request(url, accept_json=True)
     if status >= 400:
         die(f"PyPI returned {status} for {url}")
     data = json.loads(body)
@@ -427,13 +674,12 @@ def provider_pypi(env: dict[str, str]) -> dict[str, Any]:
         die(f"no version in {url}")
 
     version = _strip_v(version, env["STRIP_V_PREFIX"] == "true")
-    tracker = {"package": pkg, "source": "pypi", "version": version}
     return {
         "tag": version,
         "version": version,
-        "commit": "",
         "source_url": url,
-        "tracker": tracker,
+        "label": pkg,
+        "tracker": {"package": pkg, "source": "pypi", "version": version},
     }
 
 
@@ -450,7 +696,7 @@ def provider_generic_url(env: dict[str, str]) -> dict[str, Any]:
     if regex.groups < 1:
         die("input 'version_regex' must have at least one capture group")
 
-    status, body = http_get(url)
+    status, body, _ = http_request(url)
     if status >= 400:
         die(f"GET {url} returned HTTP {status}")
     text = body.decode("utf-8", "replace")
@@ -463,13 +709,12 @@ def provider_generic_url(env: dict[str, str]) -> dict[str, Any]:
         die(f"capture group from {url} is empty")
 
     version = _normalize_semver(_strip_v(raw, env["STRIP_V_PREFIX"] == "true"))
-    tracker = {"url": url, "source": "generic_url", "version": version}
     return {
         "tag": version,
         "version": version,
-        "commit": "",
         "source_url": url,
-        "tracker": tracker,
+        "label": url,
+        "tracker": {"url": url, "source": "generic_url", "version": version},
     }
 
 
@@ -500,24 +745,92 @@ ENV_KEYS = (
     "TAG_PATTERN",
     "STRIP_V_PREFIX",
     "TRACKER_PATH",
+    "INCLUDE_PRERELEASES",
 )
+
+
+# Outputs whose value MAY legitimately contain newlines (currently just
+# release_body — release notes are unstructured prose). All other outputs
+# stay single-line and use the standard `key=value` format. `write_outputs`
+# enforces this distinction.
+_MULTILINE_OUTPUTS = frozenset({"release_body"})
+
+# Output keys whose values come from the provider's result dict. Drives the
+# outputs dict in `run()` so adding a new field = one entry here + one entry
+# in the provider's return dict, nothing else.
+_OUTPUT_KEYS_FROM_RESULT = (
+    "version",
+    "tag",
+    "commit",
+    "source_url",
+    "label",
+    "release_url",
+    "release_name",
+    "release_body",
+    "published_at",
+)
+
+
+def _write_step_summary(env: dict[str, str], outputs: dict[str, str]) -> None:
+    """Append a one-block summary to `$GITHUB_STEP_SUMMARY` (if set).
+
+    Render is intentionally compact — callers that need richer detail can
+    append their own block afterwards. The summary is best-effort: any IO
+    failure is swallowed silently so the action's primary contract
+    (writing GITHUB_OUTPUT) is not affected.
+    """
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+
+    def cell(v: str) -> str:
+        return f"`{v}`" if v else "_n/a_"
+
+    label = outputs.get("label") or ""
+    commit = outputs.get("commit") or ""
+    commit_short = commit[:12] if commit else ""
+    changed = outputs.get("changed", "")
+    source_url = outputs.get("source_url") or ""
+    src_cell = f"<{source_url}>" if source_url else "_n/a_"
+
+    lines = [
+        "## 🔍 Upstream Watcher",
+        "",
+        "| Field | Value |",
+        "|-------|-------|",
+        f"| Source | {cell(env['SOURCE'])} |",
+        f"| Upstream | {cell(label)} |",
+        f"| Tag | {cell(outputs.get('tag', ''))} |",
+        f"| Version | {cell(outputs.get('version', ''))} |",
+        f"| Commit | {cell(commit_short)} |",
+        f"| Source URL | {src_cell} |",
+        f"| Changed | {cell(changed)} |",
+    ]
+    if outputs.get("published_at"):
+        lines.append(f"| Published | {cell(outputs['published_at'])} |")
+    if outputs.get("release_name"):
+        lines.append(f"| Release | {outputs['release_name']} |")
+
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+    except OSError as exc:
+        # Don't fail the action on a summary write issue.
+        print(f"warning: could not write step summary: {exc}", file=sys.stderr)
 
 
 def run(env: dict[str, str]) -> dict[str, str]:
     """Run a provider and return the outputs dict. Side-effect: writes the
-    tracker file when `TRACKER_PATH` is set. Returns the dict that would be
-    appended to `GITHUB_OUTPUT`.
+    tracker file when `TRACKER_PATH` is set, and appends a step summary
+    when `GITHUB_STEP_SUMMARY` is set. The returned dict is what `main()`
+    appends to `GITHUB_OUTPUT`; `write_outputs()` is the single source of
+    truth for newline validation.
     """
     source = env["SOURCE"]
     if source not in PROVIDERS:
         die(f"unknown source {source!r}")
 
     result = PROVIDERS[source](env)
-
-    for k in ("tag", "version", "commit", "source_url"):
-        v = str(result.get(k, ""))
-        if any(c in v for c in "\r\n"):
-            die(f"resolved {k} contains a newline: {v!r}")
 
     # Serialise tracker JSON with stable formatting (2-space indent, trailing
     # newline, insertion-order keys) so existing tracker files stay byte-stable
@@ -555,20 +868,21 @@ def run(env: dict[str, str]) -> dict[str, str]:
             f"No tracker_path configured; reporting changed=true for {source} {result['version']}"
         )
 
-    return {
+    outputs = {
         "changed": changed,
-        "version": result["version"],
-        "tag": result["tag"],
-        "commit": result["commit"],
-        "source_url": result["source_url"],
+        **{k: result.get(k, "") for k in _OUTPUT_KEYS_FROM_RESULT},
         "tracker_path": env["TRACKER_PATH"],
     }
+
+    _write_step_summary(env, outputs)
+
+    return outputs
 
 
 def main() -> int:
     env = {k: os.environ.get(k, "") for k in ENV_KEYS}
     outputs = run(env)
-    write_outputs(outputs)
+    write_outputs(outputs, multiline_keys=_MULTILINE_OUTPUTS)
     return 0
 
 

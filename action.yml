@@ -21,7 +21,8 @@ inputs:
         github_release       — repos/{repo}/releases/latest
         github_branch_file   — raw file from a branch HEAD
         github_tags          — repos/{repo}/tags, pick highest SemVer
-        container_image      — Docker Hub tags, pick highest SemVer
+        container_image      — container registry tags, pick highest SemVer
+                             (supports docker.io, ghcr.io, quay.io)
         npm                  — registry.npmjs.org/{pkg}/latest
         pypi                 — pypi.org/pypi/{pkg}/json
         generic_url          — fetch URL, apply version_regex
@@ -48,9 +49,14 @@ inputs:
     default: 'version'
   image_ref:
     description: >-
-      Container image reference (e.g. `docker.io/library/nginx`). Used
-      only for `container_image`. Only the `docker.io/` registry is
-      supported in this revision.
+      Container image reference. Used only for `container_image`.
+      Supported registries:
+        * `docker.io/<namespace>/<image>` (or bare `<namespace>/<image>`,
+          or bare `<image>` for official `library/*` images)
+        * `ghcr.io/<owner>/<image>` — public images only in this revision
+        * `quay.io/<namespace>/<image>` — public repos only in this revision
+      Other registries (gcr.io, mcr.microsoft.com, ECR, ACR) are rejected
+      with an explicit error; PRs adding them are welcome.
     required: false
     default: ''
   package_name:
@@ -74,10 +80,21 @@ inputs:
   tag_pattern:
     description: >-
       Optional Python regex used to filter candidate tags/versions for
-      `github_tags` and `container_image` before SemVer ranking. Default
+      `github_tags`, `container_image`, and `github_release` (when
+      `include_prereleases: true`) before SemVer ranking. Default
       `^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$`.
     required: false
     default: ''
+  include_prereleases:
+    description: >-
+      For `source: github_release` only. When `'true'`, the action lists
+      `repos/{repo}/releases` (which includes pre-releases) instead of
+      `releases/latest`, filters by `tag_pattern`, and picks the highest
+      SemVer. Required for upstreams that ship only pre-releases (e.g.
+      `actions/runner`, betas, nightlies). Default `'false'` preserves the
+      v1.0 behavior. Ignored for all other providers.
+    required: false
+    default: 'false'
   strip_v_prefix:
     description: 'Strip a leading `v` from the resolved version.'
     required: false
@@ -123,6 +140,35 @@ outputs:
   tracker_path:
     description: 'Repo-relative path of the tracker file (echoes the input).'
     value: ${{ steps.discover.outputs.tracker_path }}
+  label:
+    description: >-
+      Canonical identifier for the upstream: `owner/name` for GitHub
+      sources, the package name for `npm`/`pypi`, the canonical
+      `<registry>/<ns>/<image>` for `container_image`, or the URL for
+      `generic_url`. Use in commit messages / Slack notifications instead
+      of an `inputs.* || inputs.*` fallback chain.
+    value: ${{ steps.discover.outputs.label }}
+  release_url:
+    description: >-
+      HTML URL of the GitHub Release. Populated for `source:
+      github_release` only; empty for other providers.
+    value: ${{ steps.discover.outputs.release_url }}
+  release_name:
+    description: >-
+      Display name of the GitHub Release (may differ from the tag).
+      Populated for `source: github_release` only.
+    value: ${{ steps.discover.outputs.release_name }}
+  release_body:
+    description: >-
+      Markdown release notes from GitHub Releases. Multi-line value
+      (emitted via heredoc to GITHUB_OUTPUT). Populated for `source:
+      github_release` only.
+    value: ${{ steps.discover.outputs.release_body }}
+  published_at:
+    description: >-
+      ISO 8601 publication timestamp of the GitHub Release (e.g.
+      `2024-09-12T18:23:00Z`). Populated for `source: github_release` only.
+    value: ${{ steps.discover.outputs.published_at }}
 
 runs:
   using: composite
@@ -141,6 +187,7 @@ runs:
         TAG_PATTERN: ${{ inputs.tag_pattern }}
         STRIP_V_PREFIX: ${{ inputs.strip_v_prefix }}
         TRACKER_PATH: ${{ inputs.tracker_path }}
+        INCLUDE_PRERELEASES: ${{ inputs.include_prereleases }}
         GH_TOKEN: ${{ inputs.github_token }}
         USER_AGENT_OVERRIDE: ${{ inputs.user_agent }}
       run: |
@@ -154,6 +201,11 @@ runs:
         case "${STRIP_V_PREFIX}" in
           true|false) ;;
           *) echo "ERROR: input 'strip_v_prefix' must be 'true' or 'false' (got '${STRIP_V_PREFIX}')" >&2; exit 1 ;;
+        esac
+
+        case "${INCLUDE_PRERELEASES}" in
+          true|false) ;;
+          *) echo "ERROR: input 'include_prereleases' must be 'true' or 'false' (got '${INCLUDE_PRERELEASES}')" >&2; exit 1 ;;
         esac
 
         if [ -n "${TRACKER_PATH}" ]; then

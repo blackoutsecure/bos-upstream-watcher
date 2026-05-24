@@ -13,9 +13,10 @@ package re-publishes, and downstream release pipelines.
 
 ## ✨ Features
 
-- **Seven providers**: GitHub Releases, GitHub branch HEAD file, GitHub
-  tags, Docker Hub container tags, npm, PyPI, and any generic URL with
-  a regex.
+- **Seven providers**: GitHub Releases (incl. pre-releases), GitHub
+  branch HEAD file, GitHub tags, container tags (docker.io, ghcr.io,
+  quay.io — public images), npm, PyPI, and any generic URL with a
+  regex.
 - **Stdlib-only**: pure-Python implementation runs on the bundled
   `python3` of every GitHub-hosted runner. No `pip install`, no
   third-party dependencies.
@@ -129,18 +130,44 @@ Lists `repos/{owner}/{name}/tags` and picks the highest SemVer match.
 
 ### 4. Container registry (`container_image`)
 
-Polls Docker Hub for the highest SemVer tag of an image.
+Polls a container registry for the highest SemVer tag of an image.
+Supports three registries; others are rejected with an explicit error:
+
+* **Docker Hub** — `docker.io/<namespace>/<image>` (or bare
+  `<namespace>/<image>`, or bare `<image>` for `library/*` officials)
+* **GitHub Container Registry** — `ghcr.io/<owner>/<image>` (public
+  images only; anonymous bearer token from `ghcr.io/token`)
+* **Quay** — `quay.io/<namespace>/<image>` (public repos only)
 
 ```yaml
+# Docker Hub
 - uses: blackoutsecure/bos-upstream-watcher@v1
   with:
     source: container_image
     image_ref: docker.io/library/nginx
 ```
 
-> Only `docker.io/` registry refs are supported in this revision.
-> `ghcr.io`, `mcr.microsoft.com`, and other registries each require a
-> different bearer-token bootstrap and are not implemented yet.
+```yaml
+# GitHub Container Registry (public image)
+- uses: blackoutsecure/bos-upstream-watcher@v1
+  with:
+    source: container_image
+    image_ref: ghcr.io/blackoutsecure/docker-github-runner
+```
+
+```yaml
+# Quay (public repo)
+- uses: blackoutsecure/bos-upstream-watcher@v1
+  with:
+    source: container_image
+    image_ref: quay.io/prometheus/node-exporter
+```
+
+> Private images on `ghcr.io` and `quay.io` are not yet supported — they
+> require per-registry credential bootstrap. The action returns an
+> explicit error pointing at this limitation when it hits a `401`/`403`.
+> Other registries (`gcr.io`, `mcr.microsoft.com`, ECR, ACR) are
+> rejected up-front; PRs adding them are welcome.
 
 ### 5. npm (`npm`)
 
@@ -192,7 +219,7 @@ project websites and unstructured endpoints.
 | `upstream_repo` | `github_release`, `github_branch_file`, `github_tags` | Upstream as `owner/name`. |
 | `upstream_branch` | `github_branch_file` | Branch name. |
 | `version_file_path` | `github_branch_file` | Repo-relative path to the version file. Default `version`. |
-| `image_ref` | `container_image` | `docker.io/<namespace>/<image>`. |
+| `image_ref` | `container_image` | `docker.io/<ns>/<image>`, `ghcr.io/<owner>/<image>`, or `quay.io/<ns>/<image>`. Bare names assume Docker Hub. |
 | `package_name` | `npm`, `pypi` | Package name. npm scoped names allowed. |
 | `version_url` | `generic_url` | URL to fetch. |
 | `version_regex` | `generic_url` (required), `github_branch_file` (optional) | Python regex; first capture group is the version. |
@@ -201,7 +228,8 @@ project websites and unstructured endpoints.
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `tag_pattern` | `^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$` | Filter applied to candidate tags before SemVer ranking. |
+| `tag_pattern` | `^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$` | Filter applied to candidate tags before SemVer ranking. Used by `github_tags`, `container_image`, and `github_release` when `include_prereleases: true`. |
+| `include_prereleases` | `'false'` | When `'true'`, `github_release` lists `repos/{repo}/releases` instead of `releases/latest` and picks the highest SemVer (including `-rc`/`-beta`). Required for upstreams that ship only pre-releases (e.g. `actions/runner`). Ignored for other providers. |
 | `strip_v_prefix` | `true` | Strip a leading `v` from the resolved version. |
 | `tracker_path` | `.github/upstream/tracked-release.json` | Where the tracker JSON is written. Empty disables the file. |
 | `github_token` | `${{ github.token }}` | Token for authenticated GitHub REST calls. |
@@ -217,6 +245,16 @@ project websites and unstructured endpoints.
 | `commit` | Upstream commit SHA. Empty for `npm`, `pypi`, `container_image`, and `generic_url`. |
 | `source_url` | URL that was consulted, for traceability. |
 | `tracker_path` | Repo-relative path of the tracker file (echoes the input). |
+| `label` | Canonical identifier for the upstream — `owner/name` for GitHub sources, package name for `npm`/`pypi`, `<registry>/<ns>/<image>` for `container_image`, or the URL for `generic_url`. Use this in commit messages and Slack notifications instead of a fallback chain across inputs. |
+| `release_url` | `github_release` only. HTML URL of the GitHub Release. |
+| `release_name` | `github_release` only. Release display name (may differ from the tag). |
+| `release_body` | `github_release` only. Markdown release notes (multi-line; emitted via heredoc). |
+| `published_at` | `github_release` only. ISO 8601 publication timestamp. |
+
+The action also writes a compact summary to `$GITHUB_STEP_SUMMARY` when
+that variable is set (it always is on GitHub-hosted runners) so the
+resolved values show up directly on the workflow run page — no extra
+`run:` step needed in the caller.
 
 ## 🗂️ Tracker file
 
@@ -362,11 +400,24 @@ parallel. Each call is independent.
 The action hits `api.github.com` directly. GHES support would require
 parametrising the API base URL — open an issue if you need it.
 
-### Why is `container_image` limited to Docker Hub?
+### Why is `container_image` limited to public images?
 
-Other registries (ghcr.io, gcr.io, mcr.microsoft.com, quay.io) each
-require a different bearer-token bootstrap before the tags API is
-callable. PRs adding additional registries are welcome.
+Docker Hub's tags API works without auth for public repos. `ghcr.io`
+and `quay.io` are supported for **public** images only — private
+images on those registries require per-registry credential bootstrap
+(`docker login` semantics) that is out of scope for v1.x. The action
+returns an explicit error when it hits a `401`/`403` so the cause is
+obvious. Other registries (`gcr.io`, `mcr.microsoft.com`, ECR, ACR)
+are rejected up-front; PRs adding them are welcome.
+
+### Why is `github_release` missing my latest tag?
+
+GitHub's `releases/latest` endpoint hides pre-releases. If your
+upstream ships only `-rc` / `-beta` releases (e.g. `actions/runner`,
+betas, nightlies) the default selection will be stale or empty. Set
+`include_prereleases: 'true'` to list `repos/{repo}/releases` and pick
+the highest SemVer instead. Pair with `tag_pattern` to exclude release
+lines you don't want.
 
 ## 🤝 Contributing
 

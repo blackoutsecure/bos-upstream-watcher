@@ -55,9 +55,9 @@ We acknowledge all security reports within 48 hours.
 |----------|-----------|
 | All `inputs.*` | Forwarded via `env:`; never interpolated into `run:` bodies |
 | Upstream HTTP responses | Parsed with stdlib `json` / `re`; no `eval` or shell exec |
-| Generated outputs | Single-line enforced before write to `GITHUB_OUTPUT` |
+| Generated outputs | Single-line enforced for all outputs except `release_body`, which is emitted via heredoc (delimiter collisions are detected and extended) |
 | Tracker file path | Repo-relative only; rejects absolute paths and `..` |
-| Image refs | `docker.io/` only in this revision; other registries rejected |
+| Image refs | Supported: `docker.io/<ns>/<image>`, `ghcr.io/<owner>/<image>` (public), `quay.io/<ns>/<image>` (public); all other registries rejected with an explicit error |
 
 ## Supported Versions
 
