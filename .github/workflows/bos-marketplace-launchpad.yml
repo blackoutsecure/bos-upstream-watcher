@@ -1,0 +1,96 @@
+# Blackout Secure Marketplace Launchpad caller for a Python composite Action.
+#
+# Thin (~60-line) event-trigger wrapper around the hub-side reusable
+# bos-marketplace-launchpad.yml in blackoutsecure/bos-automation-hub.
+#
+# All orchestration logic — composing marketplace-action-ci.yml +
+# marketplace-repo-guard.yml + release-promote.yml, event routing,
+# per-stage permissions — lives in the hub reusable. This file is
+# intentionally minimal: subscribe to events, forward context, set
+# the one per-repo customization (runtime_artifact_dir).
+#
+# Per-repo customization: runtime_artifact_dir = 'src'
+# (a Python composite Action runtime artifact directory). Auto-appended to both the
+# guard's required_paths and the release's allowlist_paths by the
+# hub reusable, so a single input drives both protections.
+#
+# Routing inside the hub reusable:
+#
+#   pull_request (base = dev)         → ci      stage runs
+#   push (branch = dev)               → ci      stage runs (post-merge re-verify)
+#   pull_request_target (base = main) → guard   stage runs
+#   workflow_dispatch mode=release    → release stage runs
+#   workflow_dispatch mode=name-check → ci      stage runs (name-check on)
+#
+# This file MUST NOT exist on `main` — Marketplace publishing
+# requires zero workflow files on the default branch. The hub-side
+# release stage's allowlist excludes `.github/workflows/**` by
+# design; do not override it.
+name: Blackout Secure Marketplace Launchpad
+
+"on":
+  pull_request:
+    branches: ['dev']
+  push:
+    branches: ['dev']
+  pull_request_target:
+    branches: ['main']
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Operation: `release` (promote dev → main + GH Release) or `name-check` (one-shot Marketplace name availability probe).'
+        required: true
+        type: choice
+        options:
+          - release
+          - name-check
+        default: release
+      tag_name:
+        description: 'Release tag (SemVer, e.g. v1.2.0). Required when `mode: release`.'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run — validate + diff, do not push/tag.'
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: 'Publish the GitHub Release as a draft.'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: >-
+    bos-marketplace-launchpad-${{ github.workflow }}-${{ github.event_name }}-${{
+      github.event.pull_request.number
+      || inputs.tag_name
+      || github.ref
+    }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  launchpad:
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-marketplace-launchpad.yml@main
+    permissions:
+      contents: write
+      pull-requests: read
+    with:
+      # ----- Event-routing context (forwarded from caller event) -----
+      event_name:      ${{ github.event_name }}
+      dispatched_mode: ${{ inputs.mode || '' }}
+      pr_base_sha:     ${{ github.event.pull_request.base.sha || '' }}
+      pr_head_sha:     ${{ github.event.pull_request.head.sha || '' }}
+
+      # ----- Per-repo customization (single source of truth) -----
+      runtime_artifact_dir: 'src'
+
+      # ----- Release dispatch inputs (ignored for non-release events) -----
+      tag_name:      ${{ inputs.tag_name || '' }}
+      dry_run:       ${{ inputs.dry_run || false }}
+      release_draft: ${{ inputs.draft || false }}
