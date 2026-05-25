@@ -90,6 +90,15 @@ jobs:
       # ----- Per-repo customization (single source of truth) -----
       runtime_artifact_dir: 'src'
 
+      # ----- Community-health files inherited from blackoutsecure/.github
+      # CONTRIBUTING.md is intentionally absent locally; the org
+      # default applies. Without this override the kit `check`
+      # composite would fall back to `either` and treat the missing
+      # local CONTRIBUTING.md as a warn. SECURITY.md / CODE_OF_CONDUCT.md
+      # / SUPPORT.md / issue templates / PR template / FUNDING.yml all
+      # live in the org `.github` repo and are inherited the same way.
+      community_health_source: 'inherit'
+
       # ----- Release dispatch inputs (ignored for non-release events) -----
       tag_name:      ${{ inputs.tag_name || '' }}
       dry_run:       ${{ inputs.dry_run || false }}
