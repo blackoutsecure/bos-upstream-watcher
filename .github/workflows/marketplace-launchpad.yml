@@ -1,0 +1,174 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Blackout Secure Upstream Watcher — Marketplace Launchpad
+# Copyright © 2025-2026 Blackout Secure
+# Licensed under Apache License 2.0
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Single front-door kicker for every Marketplace-Action workflow this
+# repo runs. Replaces the legacy trio of
+#   `.github/workflows/marketplace-ci.yml`
+#   `.github/workflows/marketplace-guard.yml`
+#   `.github/workflows/release.yml`
+# with one file that routes each event-type to the right hub reusable.
+#
+# WHERE THIS LIVES: on the `dev` branch only. `main` is the curated
+# GitHub Marketplace artifact and MUST contain zero workflow files.
+# The hub `release-promote` composite hard-blocks `.github/workflows/**`
+# from landing on `main`, and the `guard` job below adds a second
+# defensive layer at PR time.
+#
+# EVENT → JOB ROUTING:
+#
+#   pull_request (base = dev)         → ci      (lint / source-check / branding)
+#   push (branch = dev)               → ci      (post-merge re-verify)
+#   pull_request_target (base = main) → guard   (workflows / required-files)
+#   workflow_dispatch mode=release    → release (promote dev → main + GH Release)
+#   workflow_dispatch mode=name-check → ci      (one-shot Marketplace name probe)
+#
+# Each job inherits ONLY the permissions it needs (workflow default is
+# read-only). Concurrency is keyed by event type so a release-in-flight
+# is never cancelled by an incoming PR.
+
+name: Marketplace Launchpad
+
+"on":
+  pull_request:
+    branches: ['dev']
+  push:
+    branches: ['dev']
+  pull_request_target:
+    branches: ['main']
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Operation: `release` (promote dev → main + GitHub Release) or `name-check` (one-shot Marketplace name availability probe).'
+        required: true
+        type: choice
+        options:
+          - release
+          - name-check
+        default: release
+      tag_name:
+        description: 'Release tag (SemVer, e.g. v1.2.0 or v1.2.0-rc.1). Required when mode=release.'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run — validate + diff, do not push/tag. Ignored when mode=name-check.'
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: 'Publish the GitHub Release as a draft. Ignored when mode=name-check.'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Per-event concurrency: PRs cancel themselves (one run per PR), releases
+# don't cancel each other (a half-finished promote is worse than waiting).
+concurrency:
+  group: >-
+    marketplace-launchpad-${{ github.workflow }}-${{ github.event_name }}-${{
+      github.event.pull_request.number
+      || inputs.tag_name
+      || github.ref
+    }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  # ── CI: PR / push / name-check dispatch ─────────────────────────────
+  ci:
+    if: >-
+      github.event_name == 'pull_request'
+      || github.event_name == 'push'
+      || (github.event_name == 'workflow_dispatch' && inputs.mode == 'name-check')
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/marketplace-action-ci.yml@main
+    with:
+      action_yml_path: 'action.yml'
+      # Start permissive while migrating; flip to `true` once warnings
+      # are cleared.
+      fail_on_warning: false
+      skip_checks: ''
+      require_security:        'warn'
+      require_code_of_conduct: 'warn'
+      require_contributing:    'warn'
+      run_branding_preview: true
+      run_name_check: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'name-check' }}
+
+  # ── Guard: PRs targeting main (publishing-policy gate) ──────────────
+  # Uses `pull_request_target` so the workflow definition (which lives
+  # on `dev`) is discoverable for PRs whose base is `main`. We never
+  # execute PR code — only `git diff` the base/head SHAs — so the
+  # elevated context is safe.
+  guard:
+    if: github.event_name == 'pull_request_target'
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/marketplace-repo-guard.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      pr_base_sha:        ${{ github.event.pull_request.base.sha }}
+      pr_head_sha:        ${{ github.event.pull_request.head.sha }}
+      check_pr_diff:      true
+      check_tree_state:   true
+      require_action_yml: true
+      blocked_paths: |
+        .github/workflows/
+      # Required runtime artifacts — deletion of any of these blocks
+      # the PR. `.github/dependabot.yml` is included because Dependabot
+      # reads its config only from the default branch (main).
+      required_paths: |
+        .github/dependabot.yml
+        action.yml
+        src
+        LICENSE
+        NOTICE
+        README.md
+
+  # ── Release: operator-initiated promote dev → main + GitHub Release ─
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'release'
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/release-promote.yml@main
+    permissions:
+      contents: write
+    with:
+      source_branch: 'dev'
+      target_branch: 'main'
+
+      # ----- Allowlist ----------------------------------------------------
+      # Everything the published Action needs at runtime, plus
+      # Marketplace policy files. Python composite Actions
+      # (`runs: composite` → `src/discover.py`) execute `src/` directly
+      # — pyproject.toml / requirements-dev.txt / test/ stay on `dev`.
+      allowlist_paths: |
+        action.yml
+        src
+        README.md
+        LICENSE
+        NOTICE
+
+      # Auto-sync `.github/dependabot.yml` from dev to main on every
+      # promote. Dependabot reads its config only from the default
+      # branch; without this, the file is silently ignored.
+      include_dependabot_config: true
+
+      # Auto-sync Marketplace-safe `.github/*` metadata (CODEOWNERS,
+      # FUNDING, SECURITY.md, ISSUE_TEMPLATE, etc.) when present.
+      include_github_metadata: true
+
+      extra_sync_paths: ''
+
+      tag_name: ${{ inputs.tag_name }}
+      dry_run:  ${{ inputs.dry_run }}
+
+      release_template_path:  ''
+      release_extra_context:  |
+        REPO=${{ github.repository }}
+        TAG=${{ inputs.tag_name }}
+      release_draft:          ${{ inputs.draft }}
+      release_prerelease:     ''
+      release_make_latest:    'true'
+      release_generate_notes: true
