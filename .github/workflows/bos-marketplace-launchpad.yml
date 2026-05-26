@@ -60,6 +60,11 @@ name: Blackout Secure Marketplace Launchpad
         required: false
         type: boolean
         default: false
+      enable_security_scan:
+        description: 'Run launchpad security_scan stage (CodeQL/repo security scan).'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -68,7 +73,7 @@ permissions:
   # statically requires `security-events: write` + `actions: read`.
   # GitHub validates this cascade at workflow-load time, BEFORE
   # evaluating the job's `if:` gate — so these grants MUST be present
-  # even if `enable_security_scan` is left at its `false` default,
+  # whether `enable_security_scan` is on or off,
   # or the workflow fails to load with:
   #   The nested job 'security_scan' is requesting
   #   'actions: read, security-events: write', but is only allowed
@@ -92,8 +97,8 @@ jobs:
       contents: write
       pull-requests: read
       # See workflow-level note above — required statically by the
-      # hub reusable's `security_scan` nested job even when that
-      # job is gated off via `enable_security_scan: false`.
+      # hub reusable's `security_scan` nested job regardless of
+      # whether the job runs for this invocation.
       security-events: write
       actions: read
     with:
@@ -105,6 +110,11 @@ jobs:
 
       # ----- Per-repo customization (single source of truth) -----
       runtime_artifact_dir: 'src'
+
+      # Enable launchpad security scan by default for this repo.
+      # For non-dispatch events this can be controlled via repo/org var
+      # BOS_ENABLE_SECURITY_SCAN (set it to 'false' to disable).
+      enable_security_scan: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_security_scan || vars.BOS_ENABLE_SECURITY_SCAN != 'false' }}
 
       # ----- Community-health files inherited from blackoutsecure/.github
       # CONTRIBUTING.md is intentionally absent locally; the org
