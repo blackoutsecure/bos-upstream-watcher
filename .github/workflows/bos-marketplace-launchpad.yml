@@ -112,9 +112,15 @@ jobs:
       runtime_artifact_dir: 'src'
 
       # Enable launchpad security scan by default for this repo.
-      # For non-dispatch events this can be controlled via repo/org var
-      # BOS_ENABLE_SECURITY_SCAN (set it to 'false' to disable).
-      enable_security_scan: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_security_scan || vars.BOS_ENABLE_SECURITY_SCAN != 'false' }}
+      # On `workflow_dispatch`, the dispatch input wins (including an
+      # explicit `false`). On all other event types, the repo/org var
+      # `BOS_ENABLE_SECURITY_SCAN` controls it — defaulting to enabled
+      # unless the var is explicitly set to the string `'false'`.
+      #
+      # NOTE: the two clauses are kept mutually exclusive on
+      # `github.event_name` so the `||` short-circuit cannot silently
+      # override an explicit dispatch `false` with the var fallback.
+      enable_security_scan: ${{ (github.event_name == 'workflow_dispatch' && inputs.enable_security_scan) || (github.event_name != 'workflow_dispatch' && vars.BOS_ENABLE_SECURITY_SCAN != 'false') }}
 
       # ----- Community-health files inherited from blackoutsecure/.github
       # CONTRIBUTING.md is intentionally absent locally; the org
