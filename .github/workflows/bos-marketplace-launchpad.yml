@@ -64,6 +64,17 @@ name: Blackout Secure Marketplace Launchpad
 permissions:
   contents: write
   pull-requests: read
+  # The hub reusable declares a nested `security_scan` job that
+  # statically requires `security-events: write` + `actions: read`.
+  # GitHub validates this cascade at workflow-load time, BEFORE
+  # evaluating the job's `if:` gate — so these grants MUST be present
+  # even if `enable_security_scan` is left at its `false` default,
+  # or the workflow fails to load with:
+  #   The nested job 'security_scan' is requesting
+  #   'actions: read, security-events: write', but is only allowed
+  #   'actions: none, security-events: none'.
+  security-events: write
+  actions: read
 
 concurrency:
   group: >-
@@ -80,6 +91,11 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+      # See workflow-level note above — required statically by the
+      # hub reusable's `security_scan` nested job even when that
+      # job is gated off via `enable_security_scan: false`.
+      security-events: write
+      actions: read
     with:
       # ----- Event-routing context (forwarded from caller event) -----
       event_name:      ${{ github.event_name }}
