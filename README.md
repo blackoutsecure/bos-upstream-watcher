@@ -5,6 +5,7 @@
 [![Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-blue?logo=github)](https://github.com/marketplace/actions/blackout-secure-upstream-watcher)
 [![GitHub release](https://img.shields.io/github/v/release/blackoutsecure/bos-upstream-watcher?sort=semver)](https://github.com/blackoutsecure/bos-upstream-watcher/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![Made by BlackoutSecure](https://img.shields.io/badge/made%20by-BlackoutSecure-1f1f1f)](https://github.com/blackoutsecure)
 
 Detect the latest version of an upstream project from a pluggable set of
 sources and report whether it changed since the last run. Designed for the
@@ -421,7 +422,59 @@ lines you don't want.
 
 ## 🤝 Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+General contribution guidelines (issue triage, PR style, test
+expectations, security review) come from the organisation default at
+[`blackoutsecure/.github/CONTRIBUTING.md`](https://github.com/blackoutsecure/.github/blob/main/CONTRIBUTING.md),
+which applies to every repo in the org. The repo-specific bits are
+below.
+
+All PRs target the **`dev`** branch. The `main` branch is built by
+the Marketplace release pipeline (the launchpad reusable in
+[bos-automation-hub](https://github.com/blackoutsecure/bos-automation-hub))
+and is read-only to humans — PRs opened against `main` will be
+closed.
+
+### Local development
+
+```bash
+# Install dev deps (Python 3.10+; stdlib-only at runtime — these are test-only)
+pip install -r requirements-dev.txt
+
+# Run the test suite (this is what CI runs)
+python3 -m pytest
+
+# Lint (ruff is the only linter; matches CI)
+ruff check src test
+
+# Exercise the action's Python entry point locally without GitHub
+# Actions, by setting the same env vars the composite step injects
+# (see action.yml `env:` block):
+SOURCE='github_branch_file' \
+UPSTREAM_REPO='sdr-enthusiasts/docker-readsb-protobuf' \
+UPSTREAM_BRANCH='main' \
+VERSION_FILE_PATH='version' \
+STRIP_V_PREFIX='true' \
+INCLUDE_PRERELEASES='false' \
+TRACKER_PATH='.upstream-version' \
+GITHUB_OUTPUT=/tmp/gh-out python3 src/discover.py
+cat /tmp/gh-out
+```
+
+### Style
+
+* **Python**: stdlib-only at runtime (no third-party `import`s
+  outside `test/` — verified by CI). Type hints on public APIs.
+  `ruff` clean.
+* **YAML (workflows)**: `actionlint` clean, pin third-party actions
+  by SHA (not tag), minimise `permissions:` per job.
+* **Composite action**: `action.yml` is the published contract;
+  changes to `inputs:` / `outputs:` are SemVer-significant.
+
+### Release flow
+
+Releases promote `dev` → `main` via the launchpad's `workflow_dispatch`
+mode = `release`. See the [Marketplace launchpad reusable](https://github.com/blackoutsecure/bos-automation-hub/blob/main/.github/workflows/bos-launchpad-marketplace.yml)
+for the full event-routing + allowlist model.
 
 ## 📄 License
 
@@ -432,7 +485,7 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
 ## 💬 Support
 
 - **Issues**: [GitHub Issues](https://github.com/blackoutsecure/bos-upstream-watcher/issues)
-- **Security**: see [SECURITY.md](SECURITY.md)
+- **Security**: see the organization-wide [Security Policy](https://github.com/blackoutsecure/.github/blob/main/SECURITY.md) and report via [GitHub Security Advisories](https://github.com/blackoutsecure/bos-upstream-watcher/security/advisories/new)
 - **Sponsor**: [GitHub Sponsors](https://github.com/sponsors/blackoutsecure)
 
 ## 🔗 Related
