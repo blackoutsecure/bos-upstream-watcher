@@ -134,11 +134,19 @@ jobs:
       # secret is missing. Dispatch input override allows operators to
       # validate the fallback path on demand.
       security_scan_use_advanced_pat: ${{ github.event_name != 'workflow_dispatch' || inputs.security_scan_use_advanced_pat }}
-      # CodeQL covers `src/discover.py` (`python`) and every workflow
-      # YAML in `.github/workflows/` (`actions`). `security-and-quality`
-      # query suite enables the broader rule set beyond default-setup
-      # baselines.
-      security_scan_codeql_languages: '["python", "actions"]'
+      # CodeQL is delegated to GitHub's first-party **default setup**
+      # (Settings → Code security → Code scanning → CodeQL → Default
+      # setup), which is already configured for `actions` on this
+      # repo. GitHub disallows running an advanced CodeQL workflow
+      # against a repo that has default setup enabled — the SARIF
+      # upload from the advanced path fails with "CodeQL analyses from
+      # advanced configurations cannot be processed when the default
+      # setup is enabled", so we skip the advanced leg here. Python
+      # source under `src/discover.py` is NOT covered by default setup
+      # — to restore that coverage either (a) extend default setup to
+      # include `python` via the Settings UI, or (b) disable default
+      # setup and pin `security_scan_codeql_languages: '["python", "actions"]'`.
+      security_scan_codeql_languages: ''
       security_scan_codeql_queries:   security-and-quality
 
       # ----- Community-health files inherited from blackoutsecure/.github
