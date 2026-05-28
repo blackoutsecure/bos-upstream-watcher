@@ -65,6 +65,11 @@ name: Blackout Secure Marketplace Launchpad
         required: false
         type: boolean
         default: true
+      security_scan_use_advanced_pat:
+        description: 'Advanced PAT mode: elevated posture probes (PS001/PS002/PS003) via the org-level `SCANNING_PAT`. Safe to leave on — no-op when the secret is missing (kit falls back to GITHUB_TOKEN).'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -122,6 +127,20 @@ jobs:
       # override an explicit dispatch `false` with the var fallback.
       enable_security_scan: ${{ (github.event_name == 'workflow_dispatch' && inputs.enable_security_scan) || (github.event_name != 'workflow_dispatch' && vars.BOS_ENABLE_SECURITY_SCAN != 'false') }}
 
+      # Advanced PAT mode enables elevated posture probes (PS001/PS002/
+      # PS003) via the org-level `SCANNING_PAT` (forwarded in the
+      # `secrets:` block below). Safe to leave on unconditionally —
+      # the kit transparently falls back to GITHUB_TOKEN when the
+      # secret is missing. Dispatch input override allows operators to
+      # validate the fallback path on demand.
+      security_scan_use_advanced_pat: ${{ github.event_name != 'workflow_dispatch' || inputs.security_scan_use_advanced_pat }}
+      # CodeQL covers `src/discover.py` (`python`) and every workflow
+      # YAML in `.github/workflows/` (`actions`). `security-and-quality`
+      # query suite enables the broader rule set beyond default-setup
+      # baselines.
+      security_scan_codeql_languages: '["python", "actions"]'
+      security_scan_codeql_queries:   security-and-quality
+
       # ----- Community-health files inherited from blackoutsecure/.github
       # CONTRIBUTING.md is intentionally absent locally; the org
       # default applies. Without this override the kit `check`
@@ -135,3 +154,8 @@ jobs:
       tag_name:      ${{ inputs.tag_name || '' }}
       dry_run:       ${{ inputs.dry_run || false }}
       release_draft: ${{ inputs.draft || false }}
+    secrets:
+      # Forwarded to the launchpad `security_scan` stage — only consulted
+      # when `security_scan_use_advanced_pat: true` AND non-empty. Safe to
+      # forward unconditionally (kit falls back to GITHUB_TOKEN when empty).
+      scanning_pat: ${{ secrets.SCANNING_PAT }}
