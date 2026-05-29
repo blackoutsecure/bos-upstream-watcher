@@ -85,6 +85,16 @@ permissions:
   #   'actions: none, security-events: none'.
   security-events: write
   actions: read
+  # Same static-cascade rule for the AI changelog: the hub's `release`
+  # job -> `release-promote.yml` -> `github-release.yml` publish job
+  # statically requests `models: read` so the renderer can call the
+  # GitHub Models inference API. Required at workflow-load time even
+  # when `release_ai_changelog` defaults to `'false'` — the cascade
+  # is checked before the input is evaluated. Without this grant the
+  # workflow fails to load with:
+  #   The nested job 'release' is requesting 'models: read', but is
+  #   only allowed 'models: none'.
+  models: read
 
 concurrency:
   group: >-
@@ -106,6 +116,11 @@ jobs:
       # whether the job runs for this invocation.
       security-events: write
       actions: read
+      # See workflow-level note above — required by the hub
+      # reusable's `release` -> `release-promote.yml` ->
+      # `github-release.yml` cascade so the AI changelog step can
+      # reach the GitHub Models inference API.
+      models: read
     with:
       # ----- Event-routing context (forwarded from caller event) -----
       event_name:      ${{ github.event_name }}
