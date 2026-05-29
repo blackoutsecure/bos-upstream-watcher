@@ -70,6 +70,22 @@ name: Blackout Secure Marketplace Launchpad
         required: false
         type: boolean
         default: true
+      # Manual-dispatch override for the hub reusable's release-time
+      # `require_workflow_success` gate. Mirrors the `force_run`
+      # checkbox on docker-family `bos-launchpad-release.yml` callers
+      # (see `docker-github-runner/.github/workflows/bos-launchpad-release.yml`).
+      # When OFF (default), the release stage will refuse to fire
+      # unless the most recent run of this workflow on `dev` HEAD
+      # ended with `conclusion: success` — i.e. CI + security_scan
+      # both green for the exact SHA being promoted. When ON, the
+      # gate is bypassed (caller passes empty `require_workflow_success`
+      # to the hub). Use sparingly — typically only for hot-fix
+      # releases where waiting for a re-run is impractical.
+      force_release:
+        description: 'Force release: bypass the dev-HEAD-must-be-green gate. Analogous to `force_run` on docker launchpad workflows. Only consulted when `mode: release`.'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -177,6 +193,22 @@ jobs:
       tag_name:      ${{ inputs.tag_name || '' }}
       dry_run:       ${{ inputs.dry_run || false }}
       release_draft: ${{ inputs.draft || false }}
+
+      # ----- Release-time hard gate -----
+      # Require the most recent run of THIS workflow on `dev` HEAD to
+      # have ended green (`conclusion == success`) before the release
+      # stage is allowed to fire. Self-referencing is intentional: the
+      # push event to `dev` runs the `ci` + `security_scan` stages,
+      # and the subsequent `mode: release` dispatch is gated on that
+      # prior run's success at the exact SHA being promoted. The hub
+      # reusable always bypasses the gate when `dry_run: true`, so
+      # previews against a red branch still work.
+      #
+      # `force_release` (workflow_dispatch only) clears the gate for
+      # the rare case where re-running CI is impractical (e.g. hot-fix
+      # window, infra flake). Mirrors `force_run` on docker launchpad
+      # workflows.
+      require_workflow_success: ${{ (github.event_name == 'workflow_dispatch' && inputs.force_release) && '' || 'bos-launchpad-marketplace.yml' }}
     secrets:
       # Forwarded to the launchpad `security_scan` stage — only consulted
       # when `security_scan_use_advanced_pat: true` AND non-empty. Safe to
