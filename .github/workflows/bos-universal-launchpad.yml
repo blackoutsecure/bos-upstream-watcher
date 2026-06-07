@@ -79,7 +79,7 @@ jobs:
       pull-requests:   write   # nested Docker Scout PR annotations
       security-events: write   # nested Docker Scout SARIF upload
       models:          read    # nested release.yml -> github-release.yml AI changelog
-    uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-launchpad-release.yml@main
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-launchpad.yml@main
     with:
       upstream_repo:     ${{ fromJson(needs.parse-config.outputs.cfg).upstream.repo || '' }}
       source:            ${{ fromJson(needs.parse-config.outputs.cfg).upstream.source || 'github_release' }}
