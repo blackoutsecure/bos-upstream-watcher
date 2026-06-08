@@ -157,7 +157,7 @@ jobs:
 
       # ----- Universal kicker wiring -----
       use_launchpad_config: true
-      sync_managed_files: true
+      sync_managed_files: ${{ fromJson(needs.parse-config.outputs.cfg).sync_managed_files != false }}
       sync_mode: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_mode || '' }}
 
       # ----- Optional stages configured from data file -----
