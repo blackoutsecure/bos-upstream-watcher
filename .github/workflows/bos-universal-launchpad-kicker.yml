@@ -70,9 +70,49 @@ jobs:
         with:
           cfg_json: ${{ steps.config.outputs.cfg }}
 
+  managed-files-guard:
+    name: Main Branch Managed Files Guard
+    needs: parse-config
+    runs-on: ${{ fromJSON(startsWith(vars.DEFAULT_RUNNER || 'ubuntu-latest', '[') && (vars.DEFAULT_RUNNER || 'ubuntu-latest') || format('"{0}"', vars.DEFAULT_RUNNER || 'ubuntu-latest')) }}
+    timeout-minutes: 2
+    env:
+      SYNC_MANAGED_FILES: ${{ fromJson(needs.parse-config.outputs.cfg).sync_managed_files }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Enforce clean main when managed-file sync is disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${SYNC_MANAGED_FILES:-}" != "false" ]]; then
+            echo "Managed-file sync enabled (or unspecified); guard skipped."
+            exit 0
+          fi
+
+          git fetch --no-tags --depth=1 origin main || true
+          if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
+            echo "::notice::origin/main not found; skipping managed-file guard."
+            exit 0
+          fi
+
+          mapfile -t matches < <(git ls-tree -r --name-only origin/main | grep -E '^\.github/workflows/|^\.github/dependabot\.yml$|^\.editorconfig$|^\.gitattributes$|^\.markdownlint\.yaml$|^\.prettierrc\.yaml$|^bos-launchpad-config\.json$|^bos-managed-files\.yaml$' || true)
+
+          if (( ${#matches[@]} > 0 )); then
+            echo "::error::Managed/unneeded files found on main while sync_managed_files=false"
+            printf '%s\n' "${matches[@]}"
+            exit 1
+          fi
+
+          echo "Main branch is clean for sync_managed_files=false."
+
   release:
     name: Release
-    needs: parse-config
+    needs: [parse-config, managed-files-guard]
     permissions:
       contents:        write   # monitor tracking-file commit + GitHub Release publish
       actions:         write   # nested monitor (`gh workflow run`)
