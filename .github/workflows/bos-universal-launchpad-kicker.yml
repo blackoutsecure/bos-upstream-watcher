@@ -71,7 +71,7 @@ jobs:
           cfg_json: ${{ steps.config.outputs.cfg }}
 
   managed-files-guard:
-    name: Main Branch Managed Files Guard
+    name: Marketplace Main Branch Guard
     needs: parse-config
     runs-on: ${{ fromJSON(startsWith(vars.DEFAULT_RUNNER || 'ubuntu-latest', '[') && (vars.DEFAULT_RUNNER || 'ubuntu-latest') || format('"{0}"', vars.DEFAULT_RUNNER || 'ubuntu-latest')) }}
     timeout-minutes: 2
@@ -84,7 +84,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Enforce clean main when managed-file sync is disabled
+      - name: Enforce Marketplace-only main when managed-file sync is disabled
         shell: bash
         run: |
           set -euo pipefail
@@ -100,15 +100,28 @@ jobs:
             exit 0
           fi
 
-          mapfile -t matches < <(git ls-tree -r --name-only origin/main | grep -E '^\.github/workflows/|^\.editorconfig$|^\.gitattributes$|^\.markdownlint\.yaml$|^\.prettierrc\.yaml$|^bos-launchpad-config\.json$|^bos-managed-files\.yaml$' || true)
+          readonly marketplace_file_pattern='^(LICENSE|NOTICE|README\.md|action\.yml|src/discover\.py)$'
+          mapfile -t unexpected_files < <(
+            git ls-tree -r --name-only origin/main \
+              | grep -Ev "${marketplace_file_pattern}" \
+              || true
+          )
 
-          if (( ${#matches[@]} > 0 )); then
-            echo "::error::Managed/unneeded files found on main while sync_managed_files=false"
-            printf '%s\n' "${matches[@]}"
+          if (( ${#unexpected_files[@]} > 0 )); then
+            echo "::error::Unexpected files found on Marketplace main"
+            printf '%s\n' "${unexpected_files[@]}"
             exit 1
           fi
 
-          echo "Main branch is clean for sync_managed_files=false."
+          required_files=(LICENSE NOTICE README.md action.yml src/discover.py)
+          for required_file in "${required_files[@]}"; do
+            if ! git cat-file -e "origin/main:${required_file}" 2>/dev/null; then
+              echo "::error::Required Marketplace file missing from main: ${required_file}"
+              exit 1
+            fi
+          done
+
+          echo "Main contains only the required Marketplace files."
 
   release:
     name: Release
