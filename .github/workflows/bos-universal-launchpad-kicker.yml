@@ -100,7 +100,7 @@ jobs:
             exit 0
           fi
 
-          readonly marketplace_file_pattern='^(LICENSE|NOTICE|README\.md|action\.yml|src/discover\.py)$'
+          readonly marketplace_file_pattern='^(\.github/dependabot\.yml|LICENSE|NOTICE|README\.md|action\.yml|src/discover\.py)$'
           mapfile -t unexpected_files < <(
             git ls-tree -r --name-only origin/main \
               | grep -Ev "${marketplace_file_pattern}" \
@@ -113,7 +113,7 @@ jobs:
             exit 1
           fi
 
-          required_files=(LICENSE NOTICE README.md action.yml src/discover.py)
+          required_files=(.github/dependabot.yml LICENSE NOTICE README.md action.yml src/discover.py)
           for required_file in "${required_files[@]}"; do
             if ! git cat-file -e "origin/main:${required_file}" 2>/dev/null; then
               echo "::error::Required Marketplace file missing from main: ${required_file}"

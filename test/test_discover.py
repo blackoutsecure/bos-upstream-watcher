@@ -323,10 +323,14 @@ class TestActionYaml:
         )
         assert (
             "marketplace_file_pattern="
-            "'^(LICENSE|NOTICE|README\\.md|action\\.yml|src/discover\\.py)$'" in body
+            "'^(\\.github/dependabot\\.yml|LICENSE|NOTICE|README\\.md|"
+            "action\\.yml|src/discover\\.py)$'" in body
         )
         assert 'grep -Ev "${marketplace_file_pattern}"' in body
-        assert "required_files=(LICENSE NOTICE README.md action.yml src/discover.py)" in body
+        assert (
+            "required_files=(.github/dependabot.yml LICENSE NOTICE README.md "
+            "action.yml src/discover.py)" in body
+        )
 
 
 # ---------------------------------------------------------------------------
