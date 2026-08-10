@@ -316,21 +316,34 @@ class TestActionYaml:
             assert f"{out}:" in body, f"missing output '{out}' in action.yml"
             assert f"steps.discover.outputs.{out}" in body, f"output '{out}' not wired"
 
-    def test_main_guard_enforces_marketplace_file_allowlist(self):
+    def test_marketplace_release_and_guard_enforce_branch_contract(self):
         root = Path(__file__).resolve().parent.parent
-        body = (root / ".github/workflows/bos-universal-launchpad-kicker.yml").read_text(
+        release_body = (root / ".github/workflows/release.yml").read_text(
             encoding="utf-8"
         )
-        assert (
-            "marketplace_file_pattern="
-            "'^(\\.github/dependabot\\.yml|LICENSE|NOTICE|README\\.md|"
-            "action\\.yml|src/discover\\.py)$'" in body
+        assert "source_branch: 'dev'" in release_body
+        assert "target_branch: 'main'" in release_body
+        for path in ("action.yml", "src", "README.md", "LICENSE", "NOTICE"):
+            assert f"        {path}\n" in release_body
+        assert "include_dependabot_config: true" in release_body
+        assert "include_github_metadata: false" in release_body
+
+        guard_body = (root / ".github/workflows/marketplace-guard.yml").read_text(
+            encoding="utf-8"
         )
-        assert 'grep -Ev "${marketplace_file_pattern}"' in body
-        assert (
-            "required_files=(.github/dependabot.yml LICENSE NOTICE README.md "
-            "action.yml src/discover.py)" in body
-        )
+        for path in (
+            ".github/workflows/",
+            ".editorconfig",
+            ".gitattributes",
+            ".gitignore",
+            ".markdownlint.yaml",
+            "pyproject.toml",
+            "requirements-dev.txt",
+            "test/",
+        ):
+            assert f"        {path}\n" in guard_body
+        for path in (".github/dependabot.yml", "action.yml", "src", "LICENSE", "NOTICE", "README.md"):
+            assert f"        {path}\n" in guard_body
 
 
 # ---------------------------------------------------------------------------

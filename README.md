@@ -472,9 +472,10 @@ cat /tmp/gh-out
 
 ### Release flow
 
-Releases promote `dev` → `main` via the launchpad's `workflow_dispatch`
-mode = `release`. See the [Marketplace launchpad reusable](https://github.com/blackoutsecure/bos-automation-hub/blob/main/.github/workflows/bos-universal-launchpad.yml)
-for the full event-routing + allowlist model.
+Releases promote the runtime allowlist from `dev` to `main` via the
+`Release (Marketplace promote)` workflow. See the
+[release-promote reusable](https://github.com/blackoutsecure/bos-automation-hub/blob/main/.github/workflows/release-promote.yml)
+for the promotion, tagging, and release model.
 
 ## 📄 License
 
