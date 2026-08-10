@@ -1,0 +1,15 @@
+default: true
+
+# Long URLs and code snippets are common in docs-heavy repos.
+MD013: false
+
+MD024:
+  siblings_only: true
+
+# GitHub admonitions and inline HTML are intentionally used.
+MD028: false
+MD033: false
+MD034: false
+
+# Templates/release notes may start at H2.
+MD041: false
