@@ -1,0 +1,68 @@
+# Dependabot config for bos-upstream-watcher.
+#
+# This repo follows the Blackout Secure Marketplace Action dev/main
+# split:
+#   * `dev`  — workflow files (`marketplace-ci.yml`, `marketplace-guard.yml`,
+#              `release.yml`) live here. Dependabot PRs target THIS branch
+#              so CI runs against them.
+#   * `main` — curated Marketplace artifact (no workflow files). Receives
+#              allowlist promotes from `dev` via the hub release pipeline.
+#
+# Dependabot reads its config only from the default branch (`main`),
+# so this file is synced to `main` on every promote and the
+# `target-branch: dev` override below is what keeps PRs landing on
+# `dev` (where the CI workflows live).
+#
+# The `target-branch: dev` knob is intentionally INSIDE the managed
+# marker blocks; the hub's upstream template doesn't yet expose this
+# field, so a future sync would clobber it without this header
+# reminder. Drop the override (and this comment) once the hub template
+# adds a first-class `target_branch` parameter.
+
+version: 2
+updates:
+
+# >>> bos-automation-hub:dependabot_actions >>>
+# Managed by https://github.com/blackoutsecure/bos-automation-hub — do not edit between markers.
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: scope
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      docker-actions:
+        patterns:
+          - "docker/*"
+      github-actions:
+        patterns:
+          - "actions/*"
+# <<< bos-automation-hub:dependabot_actions <<<
+
+# >>> bos-automation-hub:dependabot_pip >>>
+# Managed by https://github.com/blackoutsecure/bos-automation-hub — do not edit between markers.
+  - package-ecosystem: pip
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: scope
+    labels:
+      - dependencies
+      - python
+# <<< bos-automation-hub:dependabot_pip <<<
