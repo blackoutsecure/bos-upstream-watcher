@@ -316,6 +316,14 @@ class TestActionYaml:
             assert f"{out}:" in body, f"missing output '{out}' in action.yml"
             assert f"steps.discover.outputs.{out}" in body, f"output '{out}' not wired"
 
+    def test_main_guard_allows_default_branch_dependabot_config(self):
+        root = Path(__file__).resolve().parent.parent
+        body = (root / ".github/workflows/bos-universal-launchpad-kicker.yml").read_text(
+            encoding="utf-8"
+        )
+        assert "^\\.github/workflows/" in body
+        assert "^\\.github/dependabot\\.yml$" not in body
+
 
 # ---------------------------------------------------------------------------
 # v1.1.0 — multi-line output support (release_body uses heredoc)
