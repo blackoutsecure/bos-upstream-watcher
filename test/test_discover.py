@@ -323,6 +323,8 @@ class TestActionYaml:
         )
         assert "source_branch: 'dev'" in release_body
         assert "target_branch: 'main'" in release_body
+        assert "description: 'Optional SemVer tag. Leave blank to patch-bump the latest stable tag.'" in release_body
+        assert "        required: false\n        type: string\n        default: ''" in release_body
         for path in ("action.yml", "src", "README.md", "LICENSE", "NOTICE"):
             assert f"        {path}\n" in release_body
         assert "include_dependabot_config: true" in release_body

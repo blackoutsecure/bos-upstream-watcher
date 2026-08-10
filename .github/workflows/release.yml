@@ -18,9 +18,10 @@ name: Release (Marketplace promote)
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag (SemVer, e.g. v1.2.0 or v1.2.0-rc.1).'
-        required: true
+        description: 'Optional SemVer tag. Leave blank to patch-bump the latest stable tag.'
+        required: false
         type: string
+        default: ''
       dry_run:
         description: 'Dry run (validate + diff, do not push/tag).'
         required: false
