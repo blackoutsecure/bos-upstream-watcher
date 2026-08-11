@@ -1,4 +1,10 @@
 {
+  "gate": {
+    "enable_lint": true,
+    "enable_python_lint": true,
+    "python_version": "3.12",
+    "enable_shell_lint": false
+  },
   "marketplace": {
     "enabled": true,
     "target_branch": "main",
@@ -29,5 +35,19 @@
     ],
     "include_dependabot_config": true,
     "include_github_metadata": false
+  },
+  "sync_files": {
+    "services": [
+      "common",
+      "lf_line_endings",
+      "python",
+      "dependabot_actions",
+      "dependabot_pip",
+      "bos_launchpad_config",
+      "bos_universal_security",
+      "bos_universal_marketplace",
+      "bos_universal_sync"
+    ],
+    "mode": "commit"
   }
 }

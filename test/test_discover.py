@@ -375,9 +375,45 @@ class TestActionYaml:
         assert marketplace["include_dependabot_config"] is True
         assert marketplace["include_github_metadata"] is False
 
-        assert (workflow_dir / "lint.yml").exists()
+        assert not (workflow_dir / "lint.yml").exists()
         for retired_name in ("marketplace-ci.yml", "marketplace-guard.yml", "release.yml"):
             assert not (workflow_dir / retired_name).exists()
+
+    def test_universal_security_routes_to_compatible_runtime(self):
+        root = Path(__file__).resolve().parent.parent
+        workflow_dir = root / ".github/workflows"
+        security_body = (workflow_dir / "bos-universal-security-kicker.yml").read_text(
+            encoding="utf-8"
+        )
+        assert "bos-gate.yml@dev" in security_body
+        assert "bos-gate.yml@main" in security_body
+        assert "launchpad-config@dev" in security_body
+        assert "launchpad-config@main" in security_body
+        assert "startsWith(github.ref, 'refs/heads/gh-readonly-queue/dev/')" in security_body
+        assert "startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/')" in security_body
+        assert "enable_python_lint:" in security_body
+
+        config = json.loads((root / "bos-launchpad-config.json").read_text(encoding="utf-8"))
+        assert config["gate"] == {
+            "enable_lint": True,
+            "enable_python_lint": True,
+            "python_version": "3.12",
+            "enable_shell_lint": False,
+        }
+        assert config["sync_files"] == {
+            "services": [
+                "common",
+                "lf_line_endings",
+                "python",
+                "dependabot_actions",
+                "dependabot_pip",
+                "bos_launchpad_config",
+                "bos_universal_security",
+                "bos_universal_marketplace",
+                "bos_universal_sync",
+            ],
+            "mode": "commit",
+        }
 
 
 # ---------------------------------------------------------------------------
