@@ -1,0 +1,212 @@
+# Blackout Secure universal Marketplace kicker (hub-managed).
+# Customize via `bos-launchpad-config.json` (repo root), not this file.
+# Schema docs: https://github.com/blackoutsecure/bos-automation-hub
+name: Blackout Secure Universal Marketplace
+run-name: >-
+  Blackout Secure / marketplace / ${{
+    github.event_name == 'pull_request_target'
+      && format('guard PR #{0}', github.event.pull_request.number)
+      || github.event_name == 'pull_request'
+      && format('validate PR #{0}', github.event.pull_request.number)
+      || github.event_name == 'push'
+      && 'validate push'
+      || inputs.operation || 'manual'
+  }}
+
+"on":
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Marketplace operation.
+        required: true
+        type: choice
+        options: [validate, name-check, release]
+        default: validate
+      tag_name:
+        description: Optional SemVer release tag; empty auto-bumps the latest stable tag.
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        description: Validate and stage a release without publishing.
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: Publish the GitHub Release as a draft.
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketplace-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.operation || 'validate' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || inputs.operation != 'release' }}
+
+jobs:
+  parse-config:
+    name: Parse launchpad config
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      cfg: ${{ steps.normalize.outputs.cfg }}
+    steps:
+      - name: Checkout trusted configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
+          persist-credentials: false
+      - name: Load launchpad config from dev runtime
+        id: config-dev
+        if: ${{ github.event.pull_request.base.ref == 'dev' || github.ref_name == 'dev' }}
+        uses: blackoutsecure/bos-automation-hub/.github/actions/shared/launchpad-config@dev
+        with:
+          allow_missing: 'false'
+      - name: Load launchpad config from main runtime
+        id: config-main
+        if: ${{ github.event.pull_request.base.ref == 'main' || github.ref_name == 'main' }}
+        uses: blackoutsecure/bos-automation-hub/.github/actions/shared/launchpad-config@main
+        with:
+          allow_missing: 'false'
+      - name: Require Marketplace enablement
+        id: normalize
+        env:
+          CONFIG: ${{ steps.config-dev.outputs.cfg || steps.config-main.outputs.cfg }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          config = json.loads(os.environ['CONFIG'])
+          marketplace = config.get('marketplace', {})
+          if marketplace.get('enabled') is not True:
+              sys.exit('marketplace.enabled must be true')
+
+          for key in ('allowlist_paths', 'blocked_paths', 'required_paths'):
+              paths = marketplace.get(key, [])
+              if isinstance(paths, list):
+                if not all(isinstance(path, str) and path.strip() for path in paths):
+                  sys.exit(f'marketplace.{key} must contain non-empty strings')
+                marketplace[key] = '\n'.join(path.strip() for path in paths)
+              elif not isinstance(paths, str):
+                sys.exit(f'marketplace.{key} must be a string or an array')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write('cfg<<__BOS_MARKETPLACE_CFG__\n')
+              output.write(json.dumps(config, separators=(',', ':')) + '\n')
+              output.write('__BOS_MARKETPLACE_CFG__\n')
+          PY
+
+  validate-dev:
+    name: Marketplace validation (dev runtime)
+    needs: parse-config
+    if: >-
+      (github.event.pull_request.base.ref == 'dev' || github.ref_name == 'dev')
+      && (
+        github.event_name == 'pull_request'
+        || github.event_name == 'push'
+        || (github.event_name == 'workflow_dispatch' && inputs.operation != 'release')
+      )
+    permissions:
+      contents: read
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/marketplace-action-ci.yml@dev
+    with:
+      action_yml_path: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.action_yml_path || 'action.yml' }}
+      fail_on_warning: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.fail_on_warning == true }}
+      require_security: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.require_security || 'warn' }}
+      require_code_of_conduct: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.require_code_of_conduct || 'warn' }}
+      require_contributing: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.require_contributing || 'warn' }}
+      run_branding_preview: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.run_branding_preview != false }}
+      run_name_check: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'name-check' }}
+
+  validate-main:
+    name: Marketplace validation (main runtime)
+    needs: parse-config
+    if: >-
+      (github.event.pull_request.base.ref == 'main' || github.ref_name == 'main')
+      && (
+        github.event_name == 'pull_request'
+        || github.event_name == 'push'
+        || (github.event_name == 'workflow_dispatch' && inputs.operation != 'release')
+      )
+    permissions:
+      contents: read
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/marketplace-action-ci.yml@main
+    with:
+      action_yml_path: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.action_yml_path || 'action.yml' }}
+      fail_on_warning: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.fail_on_warning == true }}
+      require_security: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.require_security || 'warn' }}
+      require_code_of_conduct: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.require_code_of_conduct || 'warn' }}
+      require_contributing: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.require_contributing || 'warn' }}
+      run_branding_preview: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.run_branding_preview != false }}
+      run_name_check: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'name-check' }}
+
+  guard:
+    name: Marketplace stable-branch guard
+    needs: parse-config
+    if: >-
+      github.event_name == 'pull_request_target'
+      && github.event.pull_request.base.ref
+        == 'main'
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/marketplace-repo-guard.yml@main
+    with:
+      pr_base_sha: ${{ github.event.pull_request.base.sha }}
+      pr_head_sha: ${{ github.event.pull_request.head.sha }}
+      check_pr_diff: true
+      check_tree_state: true
+      require_action_yml: true
+      blocked_paths: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.blocked_paths || '.github/workflows/' }}
+      required_paths: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.required_paths || '' }}
+
+  release-dev:
+    name: Marketplace release (dev runtime)
+    needs: parse-config
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'release' && github.ref_name == 'dev' }}
+    permissions:
+      contents: write
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/release-promote.yml@dev
+    with:
+      source_branch: ${{ github.event.repository.default_branch }}
+      target_branch: 'main'
+      allowlist_paths: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.allowlist_paths }}
+      include_dependabot_config: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.include_dependabot_config != false }}
+      include_github_metadata: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.include_github_metadata == true }}
+      extra_sync_paths: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.extra_sync_paths || '' }}
+      tag_name: ${{ inputs.tag_name }}
+      dry_run: ${{ inputs.dry_run }}
+      release_draft: ${{ inputs.draft }}
+      release_make_latest: 'true'
+      release_generate_notes: true
+
+  release-main:
+    name: Marketplace release (main runtime)
+    needs: parse-config
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'release' && github.ref_name == 'main' }}
+    permissions:
+      contents: write
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/release-promote.yml@main
+    with:
+      source_branch: ${{ github.event.repository.default_branch }}
+      target_branch: 'main'
+      allowlist_paths: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.allowlist_paths }}
+      include_dependabot_config: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.include_dependabot_config != false }}
+      include_github_metadata: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.include_github_metadata == true }}
+      extra_sync_paths: ${{ fromJson(needs.parse-config.outputs.cfg).marketplace.extra_sync_paths || '' }}
+      tag_name: ${{ inputs.tag_name }}
+      dry_run: ${{ inputs.dry_run }}
+      release_draft: ${{ inputs.draft }}
+      release_make_latest: 'true'
+      release_generate_notes: true

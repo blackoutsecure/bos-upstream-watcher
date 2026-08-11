@@ -316,24 +316,45 @@ class TestActionYaml:
             assert f"{out}:" in body, f"missing output '{out}' in action.yml"
             assert f"steps.discover.outputs.{out}" in body, f"output '{out}' not wired"
 
-    def test_marketplace_release_and_guard_enforce_branch_contract(self):
+    def test_universal_marketplace_enforces_branch_contract(self):
         root = Path(__file__).resolve().parent.parent
-        release_body = (root / ".github/workflows/release.yml").read_text(
+        workflow_dir = root / ".github/workflows"
+        marketplace_body = (workflow_dir / "bos-universal-marketplace-kicker.yml").read_text(
             encoding="utf-8"
         )
-        assert "source_branch: 'dev'" in release_body
-        assert "target_branch: 'main'" in release_body
-        assert "description: 'Optional SemVer tag. Leave blank to patch-bump the latest stable tag.'" in release_body
-        assert "        required: false\n        type: string\n        default: ''" in release_body
-        for path in ("action.yml", "src", "README.md", "LICENSE", "NOTICE"):
-            assert f"        {path}\n" in release_body
-        assert "include_dependabot_config: true" in release_body
-        assert "include_github_metadata: false" in release_body
+        assert "branches: [main, dev]" in marketplace_body
+        assert "pull_request_target:" in marketplace_body
+        assert "branches: [main]" in marketplace_body
+        assert "options: [validate, name-check, release]" in marketplace_body
+        assert "marketplace-action-ci.yml@dev" in marketplace_body
+        assert "marketplace-action-ci.yml@main" in marketplace_body
+        assert "marketplace-repo-guard.yml@main" in marketplace_body
+        assert "release-promote.yml@dev" in marketplace_body
+        assert "release-promote.yml@main" in marketplace_body
+        assert "launchpad-config@dev" in marketplace_body
+        assert "launchpad-config@main" in marketplace_body
+        assert "github.event.pull_request.base.ref == 'dev'" in marketplace_body
+        assert "github.event.pull_request.base.ref == 'main'" in marketplace_body
+        assert "github.ref_name == 'dev'" in marketplace_body
+        assert "github.ref_name == 'main'" in marketplace_body
+        assert "github.event.repository.default_branch" in marketplace_body
+        assert "if isinstance(paths, list):" in marketplace_body
+        assert "marketplace.{key} must be a string or an array" in marketplace_body
+        assert "marketplace[key] = '\\n'.join(path.strip() for path in paths)" in marketplace_body
+        assert "cfg: ${{ steps.normalize.outputs.cfg }}" in marketplace_body
 
-        guard_body = (root / ".github/workflows/marketplace-guard.yml").read_text(
-            encoding="utf-8"
-        )
-        for path in (
+        config = json.loads((root / "bos-launchpad-config.json").read_text(encoding="utf-8"))
+        marketplace = config["marketplace"]
+        assert marketplace["enabled"] is True
+        assert marketplace["target_branch"] == "main"
+        assert marketplace["allowlist_paths"] == [
+            "action.yml",
+            "src",
+            "README.md",
+            "LICENSE",
+            "NOTICE",
+        ]
+        assert marketplace["blocked_paths"] == [
             ".github/workflows/",
             ".editorconfig",
             ".gitattributes",
@@ -342,10 +363,21 @@ class TestActionYaml:
             "pyproject.toml",
             "requirements-dev.txt",
             "test/",
-        ):
-            assert f"        {path}\n" in guard_body
-        for path in (".github/dependabot.yml", "action.yml", "src", "LICENSE", "NOTICE", "README.md"):
-            assert f"        {path}\n" in guard_body
+        ]
+        assert marketplace["required_paths"] == [
+            ".github/dependabot.yml",
+            "action.yml",
+            "src",
+            "LICENSE",
+            "NOTICE",
+            "README.md",
+        ]
+        assert marketplace["include_dependabot_config"] is True
+        assert marketplace["include_github_metadata"] is False
+
+        assert (workflow_dir / "lint.yml").exists()
+        for retired_name in ("marketplace-ci.yml", "marketplace-guard.yml", "release.yml"):
+            assert not (workflow_dir / retired_name).exists()
 
 
 # ---------------------------------------------------------------------------

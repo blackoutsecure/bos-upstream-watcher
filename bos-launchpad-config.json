@@ -1,0 +1,33 @@
+{
+  "marketplace": {
+    "enabled": true,
+    "target_branch": "main",
+    "allowlist_paths": [
+      "action.yml",
+      "src",
+      "README.md",
+      "LICENSE",
+      "NOTICE"
+    ],
+    "blocked_paths": [
+      ".github/workflows/",
+      ".editorconfig",
+      ".gitattributes",
+      ".gitignore",
+      ".markdownlint.yaml",
+      "pyproject.toml",
+      "requirements-dev.txt",
+      "test/"
+    ],
+    "required_paths": [
+      ".github/dependabot.yml",
+      "action.yml",
+      "src",
+      "LICENSE",
+      "NOTICE",
+      "README.md"
+    ],
+    "include_dependabot_config": true,
+    "include_github_metadata": false
+  }
+}
