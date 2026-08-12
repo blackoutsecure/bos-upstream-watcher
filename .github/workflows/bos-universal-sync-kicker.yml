@@ -1,0 +1,49 @@
+# Managed by https://github.com/blackoutsecure/bos-automation-hub —
+# do not edit. To modify, update the `bos_universal_sync` service in
+# .github/actions/sync-managed-files/sync.py.
+#
+# Blackout Secure universal sync kicker (hub-managed).
+# Customize via `bos-launchpad-config.json` (repo root), not this file.
+# Schema docs: https://github.com/blackoutsecure/bos-automation-hub
+name: Blackout Secure universal sync (kicker)
+run-name: >-
+  Blackout Secure universal sync / ${{
+    github.event_name == 'workflow_dispatch'
+      && format('manual ({0})', inputs.mode)
+      || github.event_name == 'schedule'
+      && 'scheduled'
+      || 'config changed'
+  }}
+
+"on":
+  schedule:
+    - cron: '29 14 * * 1'
+  push:
+    paths:
+      - 'bos-launchpad-config.json'
+      - 'bos-managed-files.yaml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Run mode: commit drift back, or check-only'
+        type: choice
+        options: [commit, check]
+        default: commit
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync managed files
+    if: >-
+      !cancelled()
+      && (
+        github.event_name != 'push'
+        || github.ref_name == github.event.repository.default_branch
+      )
+    permissions:
+      contents: write
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/sync-managed-files.yml@main
+    with:
+      mode: ${{ inputs.mode || '' }}

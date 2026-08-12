@@ -326,22 +326,17 @@ class TestActionYaml:
         assert "pull_request_target:" in marketplace_body
         assert "branches: [main]" in marketplace_body
         assert "options: [validate, name-check, release]" in marketplace_body
-        assert "marketplace-action-ci.yml@dev" in marketplace_body
         assert "marketplace-action-ci.yml@main" in marketplace_body
         assert "marketplace-repo-guard.yml@main" in marketplace_body
-        assert "release-promote.yml@dev" in marketplace_body
         assert "release-promote.yml@main" in marketplace_body
-        assert "launchpad-config@dev" in marketplace_body
         assert "launchpad-config@main" in marketplace_body
-        assert "github.event.pull_request.base.ref == 'dev'" in marketplace_body
-        assert "github.event.pull_request.base.ref == 'main'" in marketplace_body
-        assert "github.ref_name == 'dev'" in marketplace_body
-        assert "github.ref_name == 'main'" in marketplace_body
         assert "github.event.repository.default_branch" in marketplace_body
-        assert "if isinstance(paths, list):" in marketplace_body
-        assert "marketplace.{key} must be a string or an array" in marketplace_body
-        assert "marketplace[key] = '\\n'.join(path.strip() for path in paths)" in marketplace_body
-        assert "cfg: ${{ steps.normalize.outputs.cfg }}" in marketplace_body
+        assert "marketplace-action-ci.yml@dev" not in marketplace_body
+        assert "release-promote.yml@dev" not in marketplace_body
+        assert "launchpad-config@dev" not in marketplace_body
+        assert "cfg: ${{ steps.config.outputs.cfg }}" in marketplace_body
+        assert "marketplace.source_branch || github.event.repository.default_branch" in marketplace_body
+        assert "marketplace.target_branch || 'main'" in marketplace_body
 
         config = json.loads((root / "bos-launchpad-config.json").read_text(encoding="utf-8"))
         marketplace = config["marketplace"]
@@ -379,19 +374,26 @@ class TestActionYaml:
         for retired_name in ("marketplace-ci.yml", "marketplace-guard.yml", "release.yml"):
             assert not (workflow_dir / retired_name).exists()
 
-    def test_universal_security_routes_to_compatible_runtime(self):
+    def test_universal_kickers_use_promoted_runtime_and_config(self):
         root = Path(__file__).resolve().parent.parent
         workflow_dir = root / ".github/workflows"
         security_body = (workflow_dir / "bos-universal-security-kicker.yml").read_text(
             encoding="utf-8"
         )
-        assert "bos-gate.yml@dev" in security_body
         assert "bos-gate.yml@main" in security_body
-        assert "launchpad-config@dev" in security_body
         assert "launchpad-config@main" in security_body
-        assert "startsWith(github.ref, 'refs/heads/gh-readonly-queue/dev/')" in security_body
-        assert "startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/')" in security_body
+        assert "bos-gate.yml@dev" not in security_body
+        assert "launchpad-config@dev" not in security_body
         assert "enable_python_lint:" in security_body
+
+        sync_body = (workflow_dir / "bos-universal-sync-kicker.yml").read_text(
+            encoding="utf-8"
+        )
+        assert "sync-managed-files.yml@main" in sync_body
+        assert "bos-launchpad-config.json" in sync_body
+        assert "bos-managed-files.yaml" in sync_body
+        assert "github.event.repository.default_branch" in sync_body
+        assert "mode: ${{ inputs.mode || '' }}" in sync_body
 
         config = json.loads((root / "bos-launchpad-config.json").read_text(encoding="utf-8"))
         assert config["gate"] == {
