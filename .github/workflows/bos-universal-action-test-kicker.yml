@@ -53,6 +53,7 @@ jobs:
     if: needs.parse_config.outputs.target_ref == 'dev'
     permissions:
       contents: read
+      models: read
     uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-action-test.yml@dev
 
   action-test-main:
@@ -61,4 +62,5 @@ jobs:
     if: needs.parse_config.outputs.target_ref == 'main'
     permissions:
       contents: read
+      models: read
     uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-action-test.yml@main
