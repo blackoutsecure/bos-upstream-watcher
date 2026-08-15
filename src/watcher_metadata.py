@@ -22,9 +22,7 @@ PACKAGE_REPOSITORY = "https://github.com/blackoutsecure/bos-upstream-watcher"
 PACKAGE_DOCUMENTATION = f"{PACKAGE_REPOSITORY}#readme"
 PACKAGE_ISSUES = f"{PACKAGE_REPOSITORY}/issues"
 PACKAGE_RELEASES = f"{PACKAGE_REPOSITORY}/releases"
-PACKAGE_MARKETPLACE = (
-    "https://github.com/marketplace/actions/blackout-secure-upstream-watcher"
-)
+PACKAGE_MARKETPLACE = "https://github.com/marketplace/actions/blackout-secure-upstream-watcher"
 PACKAGE_SUPPORT_EMAIL = "info@blackoutsecure.app"
 PACKAGE_LICENSE = "Apache-2.0"
 PACKAGE_COPYRIGHT = "Copyright © 2025-2026 Blackout Secure"

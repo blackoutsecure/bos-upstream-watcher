@@ -108,7 +108,7 @@ inputs:
     description: >-
       Repo-relative path to the tracker JSON file. Created on first run;
       rewritten when the upstream version changes. Empty inherits the
-      configured value (`.github/upstream/tracked-release.json` by
+      configured value (`.github/tracked-release.json` by
       default); pass `none` to disable the file, in which case the action
       always reports `changed=true`.
     required: false

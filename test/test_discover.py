@@ -347,7 +347,10 @@ class TestActionYaml:
         assert "release-promote.yml@dev" not in marketplace_body
         assert "github.event.repository.default_branch" in marketplace_body
         assert "cfg: ${{ steps.config.outputs.cfg }}" in marketplace_body
-        assert "marketplace.source_branch || github.event.repository.default_branch" in marketplace_body
+        assert (
+            "marketplace.source_branch || github.event.repository.default_branch"
+            in marketplace_body
+        )
         assert "marketplace.target_branch || 'main'" in marketplace_body
 
         config = json.loads(
@@ -401,9 +404,7 @@ class TestActionYaml:
         assert "config_authoritative: true" in security_body
         assert "secrets: inherit" in security_body
 
-        sync_body = (workflow_dir / "bos-universal-sync-kicker.yml").read_text(
-            encoding="utf-8"
-        )
+        sync_body = (workflow_dir / "bos-universal-sync-kicker.yml").read_text(encoding="utf-8")
         assert "bos-universal-sync.yml@main" in sync_body
         assert "bos-universal-sync.yml@dev" in sync_body
         assert "'.github/bos-universal-config.json'" in sync_body
@@ -479,6 +480,7 @@ class TestActionYaml:
             "shellcheck",
             "bos_universal_security_kicker",
             "bos_universal_sync_kicker",
+            "bos_universal_upstream_kicker",
             "bos_universal_marketplace_kicker",
             "bos_universal_action_test_kicker",
         }
@@ -503,9 +505,7 @@ class TestWriteOutputsMultiline:
         out = tmp_path / "gh-out"
         monkeypatch.setenv("GITHUB_OUTPUT", str(out))
         body = "line1\nline2\nline3"
-        discover.write_outputs(
-            {"release_body": body}, multiline_keys=frozenset({"release_body"})
-        )
+        discover.write_outputs({"release_body": body}, multiline_keys=frozenset({"release_body"}))
         content = out.read_text(encoding="utf-8")
         # Heredoc format: key<<DELIM\nvalue\nDELIM\n
         assert content.startswith("release_body<<BOS_UPSTREAM_EOF\n")
@@ -518,9 +518,7 @@ class TestWriteOutputsMultiline:
         out = tmp_path / "gh-out"
         monkeypatch.setenv("GITHUB_OUTPUT", str(out))
         body = "innocuous text\nBOS_UPSTREAM_EOF\nmore text"
-        discover.write_outputs(
-            {"release_body": body}, multiline_keys=frozenset({"release_body"})
-        )
+        discover.write_outputs({"release_body": body}, multiline_keys=frozenset({"release_body"}))
         content = out.read_text(encoding="utf-8")
         # The picked delimiter must NOT be the bare default (else heredoc breaks).
         first_line = content.split("\n", 1)[0]
@@ -560,10 +558,7 @@ class TestParseLinkNext:
         assert discover._parse_link_next(h) == "/v2/owner/img/tags/list?last=v1.0.0&n=100"
 
     def test_handles_multiple_rels(self):
-        h = (
-            '</v2/owner/img/tags/list?last=foo>; rel="next", '
-            '</v2/owner/img/tags/list>; rel="first"'
-        )
+        h = '</v2/owner/img/tags/list?last=foo>; rel="next", </v2/owner/img/tags/list>; rel="first"'
         assert discover._parse_link_next(h) == "/v2/owner/img/tags/list?last=foo"
 
     def test_handles_rel_without_quotes(self):
@@ -676,9 +671,7 @@ class TestGhcrProvider:
 
         monkeypatch.setattr(discover, "http_request", fake_http_request)
 
-        result = discover.provider_container_image(
-            _container_env("ghcr.io/owner/img")
-        )
+        result = discover.provider_container_image(_container_env("ghcr.io/owner/img"))
         assert result["tag"] == "v1.2.10"
         assert result["version"] == "1.2.10"
         assert result["label"] == "ghcr.io/owner/img"
@@ -702,9 +695,7 @@ class TestGhcrProvider:
 
         monkeypatch.setattr(discover, "http_request", fake_http_request)
 
-        result = discover.provider_container_image(
-            _container_env("ghcr.io/owner/img")
-        )
+        result = discover.provider_container_image(_container_env("ghcr.io/owner/img"))
         # Highest across BOTH pages wins.
         assert result["tag"] == "v2.0.0"
         assert page["count"] == 2
@@ -1006,9 +997,7 @@ class TestRunExtraOutputs:
         assert "\n" in outputs["release_body"]
         assert outputs["published_at"] == "2024-09-12T18:23:00Z"
 
-    def test_run_writes_multiline_release_body_to_github_output(
-        self, tmp_path, monkeypatch
-    ):
+    def test_run_writes_multiline_release_body_to_github_output(self, tmp_path, monkeypatch):
         _install_stub_provider(monkeypatch, "1.2.3")
         out_file = tmp_path / "gh-out"
         monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))

@@ -335,7 +335,11 @@ def _validate(env: Mapping[str, str], *, validate_tracker_path: bool = True) -> 
         if env.get(key) not in {"true", "false"}:
             raise ConfigError(f"'{key.lower()}' must be true or false (got '{env.get(key)}')")
     tracker = env.get("TRACKER_PATH", "")
-    if validate_tracker_path and tracker and (tracker.startswith("/") or ".." in Path(tracker).parts):
+    if (
+        validate_tracker_path
+        and tracker
+        and (tracker.startswith("/") or ".." in Path(tracker).parts)
+    ):
         raise ConfigError(
             f"'{CONFIG_SECTION}.tracker_path' must be a repo-relative path: '{tracker}'"
         )

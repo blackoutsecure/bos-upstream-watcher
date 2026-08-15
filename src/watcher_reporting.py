@@ -331,9 +331,7 @@ def render_summary(report: RunReport, settings: ReportingSettings) -> str:
             lines.append(f"- `{finding.rule_id}` — {finding.remediation}")
         lines.append("")
     else:
-        lines.extend(
-            ["### Blackout Secure Recommended Remediation", "", "No action required.", ""]
-        )
+        lines.extend(["### Blackout Secure Recommended Remediation", "", "No action required.", ""])
 
     if settings.enable_ai_section:
         lines.extend(_ai_lines(report.ai))

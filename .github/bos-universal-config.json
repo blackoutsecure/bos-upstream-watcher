@@ -21,6 +21,7 @@
       "baseline",
       "bos_universal_security_kicker",
       "bos_universal_sync_kicker",
+      "bos_universal_upstream_kicker",
       "bos_universal_marketplace_kicker",
       "bos_universal_action_test_kicker"
     ],
@@ -102,6 +103,12 @@
     },
     "timeout_pytest": 10,
     "timeout_smoke": 5
+  },
+  "upstream_watcher": {
+    "source": "github_release",
+    "upstream_repo": "blackoutsecure/bos-upstream-watcher",
+    "include_prereleases": false,
+    "strip_v_prefix": true
   },
   "marketplace": {
     "enabled": true,

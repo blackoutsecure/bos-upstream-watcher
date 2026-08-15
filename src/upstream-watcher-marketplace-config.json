@@ -4,7 +4,7 @@
     "version_file_path": "version",
     "strip_v_prefix": true,
     "include_prereleases": false,
-    "tracker_path": ".github/upstream/tracked-release.json",
+    "tracker_path": ".github/tracked-release.json",
     "ai": {
       "enable_ai_release_summary": true,
       "ai_release_summary_provider": "auto",

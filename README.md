@@ -240,6 +240,12 @@ Watcher policy lives under an `upstream_watcher` section, so one universal
 config document can carry security, Marketplace, managed-file sync, and
 watcher policy side by side:
 
+The marketplace config owns the default tracker path,
+`.github/tracked-release.json`. An organization/global config can override
+that default for shared policy, and an individual repository config can
+override it again when it needs a distinct tracker location. The highest
+precedence non-empty setting wins; action inputs override all config tiers.
+
 ```jsonc
 {
   "organization": {
@@ -253,7 +259,7 @@ watcher policy side by side:
   "upstream_watcher": {
     "source": "github_release",
     "upstream_repo": "nginx/nginx",
-    "tracker_path": ".github/upstream/nginx.json",
+    "tracker_path": ".github/nginx-tracked-release.json",
     "ai": {
       "enable_ai_release_summary": true,
       "enable_ai_error_remediation": true,
@@ -303,7 +309,7 @@ report.
 | `tag_pattern` | `^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$` | Filter applied to candidate tags before SemVer ranking. Used by `github_tags`, `container_image`, and `github_release` when `include_prereleases: true`. |
 | `include_prereleases` | `false` | When `true`, `github_release` lists `repos/{repo}/releases` instead of `releases/latest` and picks the highest SemVer (including `-rc`/`-beta`). Required for upstreams that ship only pre-releases (e.g. `actions/runner`). Ignored for other providers. |
 | `strip_v_prefix` | `true` | Strip a leading `v` from the resolved version. |
-| `tracker_path` | `.github/upstream/tracked-release.json` | Where the tracker JSON is written. Pass `none` to disable the file. |
+| `tracker_path` | `.github/tracked-release.json` | Where the tracker JSON is written. The marketplace default can be overridden by the organization/global config or a repository config. Pass `none` to disable the file. |
 | `github_token` | `${{ github.token }}` | Token for authenticated GitHub REST calls. Input only — never read from config. |
 | `user_agent` | `bos-upstream-watcher/<version>` | Override the outbound `User-Agent` header. Also settable as `upstream_watcher.user_agent`. |
 
@@ -405,7 +411,8 @@ advisories, and `never` never fails on findings alone. Set
 
 ## 🗂️ Tracker file
 
-When `tracker_path` is set (the default), the action writes a JSON file
+When `tracker_path` is set (the marketplace default is
+`.github/tracked-release.json`), the action writes a JSON file
 whose shape depends on the provider. Example for `github_release`:
 
 ```json
@@ -462,7 +469,7 @@ Tags are sorted with strict SemVer ordering:
 The script logs to stdout for every run:
 
 ```text
-First run for github_release 1.27.2 — wrote .github/upstream/tracked-release.json
+First run for github_release 1.27.2 — wrote .github/tracked-release.json
 ```
 
 When `changed=true` and a previous tracker file existed, a unified diff
@@ -470,8 +477,8 @@ is printed:
 
 ```text
 Change detected (github_release):
---- .github/upstream/tracked-release.json
-+++ .github/upstream/tracked-release.json.new
+--- .github/tracked-release.json
++++ .github/tracked-release.json.new
 @@ -1,5 +1,5 @@
  {
    "repo": "nginx/nginx",

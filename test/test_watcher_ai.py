@@ -81,7 +81,12 @@ class TestHeuristics:
 
     def test_summary_mentions_both_versions(self):
         text = watcher_ai.heuristic_summary(
-            {"label": "nginx/nginx", "previous_version": "1.0.0", "version": "2.0.0", "update_type": "major"}
+            {
+                "label": "nginx/nginx",
+                "previous_version": "1.0.0",
+                "version": "2.0.0",
+                "update_type": "major",
+            }
         )
         assert "nginx/nginx" in text
         assert "1.0.0 → 2.0.0" in text
@@ -146,9 +151,7 @@ class TestReleaseDigest:
 
     def test_unusable_response_returns_none(self, monkeypatch):
         for body in (None, "not json", json.dumps({"summary": "s", "impact": "critical"})):
-            monkeypatch.setattr(
-                watcher_ai, "_request_content", lambda *a, b=body, **k: b
-            )
+            monkeypatch.setattr(watcher_ai, "_request_content", lambda *a, b=body, **k: b)
             assert watcher_ai.release_digest({}, _provider()) is None
 
 

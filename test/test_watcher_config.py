@@ -1,6 +1,7 @@
 """Config cascade tests: bundled defaults, global tier, repo tier, inputs."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -33,15 +34,19 @@ def _inputs(**overrides):
 
 class TestBundledDefaults:
     def test_marketplace_config_supplies_defaults(self, tmp_path):
-        resolved = watcher_config.resolve(_inputs(SOURCE="npm", PACKAGE_NAME="left-pad"), root=tmp_path)
-        assert resolved.env["TRACKER_PATH"] == ".github/upstream/tracked-release.json"
+        resolved = watcher_config.resolve(
+            _inputs(SOURCE="npm", PACKAGE_NAME="left-pad"), root=tmp_path
+        )
+        assert resolved.env["TRACKER_PATH"] == ".github/tracked-release.json"
         assert resolved.env["STRIP_V_PREFIX"] == "true"
         assert resolved.env["INCLUDE_PRERELEASES"] == "false"
         assert resolved.env["VERSION_FILE_PATH"] == "version"
         assert "bundled marketplace defaults" in resolved.sources
 
     def test_ai_and_reporting_on_by_default(self, tmp_path):
-        resolved = watcher_config.resolve(_inputs(SOURCE="pypi", PACKAGE_NAME="requests"), root=tmp_path)
+        resolved = watcher_config.resolve(
+            _inputs(SOURCE="pypi", PACKAGE_NAME="requests"), root=tmp_path
+        )
         assert resolved.ai.enable_ai_release_summary is True
         assert resolved.ai.enable_ai_error_remediation is True
         assert resolved.reporting.enable_job_summary is True
@@ -61,9 +66,7 @@ class TestBundledDefaults:
             tmp_path / "upstream-watcher.json",
             {"source": "npm", "package_name": "x", "user_agent": "from-config"},
         )
-        resolved = watcher_config.resolve(
-            _inputs(USER_AGENT_OVERRIDE="from-input"), root=tmp_path
-        )
+        resolved = watcher_config.resolve(_inputs(USER_AGENT_OVERRIDE="from-input"), root=tmp_path)
         assert resolved.env["USER_AGENT_OVERRIDE"] == "from-input"
 
 
@@ -88,7 +91,9 @@ class TestRepoConfig:
         assert resolved.repository_config == ".github/bos-universal-config.json"
 
     def test_standalone_config_needs_no_section(self, tmp_path):
-        _write(tmp_path / "upstream-watcher.json", {"source": "npm", "package_name": "@actions/core"})
+        _write(
+            tmp_path / "upstream-watcher.json", {"source": "npm", "package_name": "@actions/core"}
+        )
         resolved = watcher_config.resolve(_inputs(), root=tmp_path)
         assert resolved.env["SOURCE"] == "npm"
         assert resolved.env["PACKAGE_NAME"] == "@actions/core"
@@ -149,7 +154,9 @@ class TestGlobalConfig:
 
     def test_inline_json_merges_last(self, tmp_path):
         resolved = watcher_config.resolve(
-            _inputs(CONFIG_JSON='{"upstream_watcher": {"source": "pypi", "package_name": "flask"}}'),
+            _inputs(
+                CONFIG_JSON='{"upstream_watcher": {"source": "pypi", "package_name": "flask"}}'
+            ),
             root=tmp_path,
         )
         assert resolved.env["SOURCE"] == "pypi"
@@ -279,9 +286,23 @@ class TestHubIntegrationContract:
         assert resolved.ai.enable_ai_release_summary is True
         assert resolved.reporting.fail_on == "fail"
         assert resolved.repository_config == ".github/bos-universal-config.json"
-        assert "global config (hub-config/sync-files/config/upstream-watcher-global-config.json)" in (
-            resolved.sources
+        assert (
+            "global config (hub-config/sync-files/config/upstream-watcher-global-config.json)"
+            in (resolved.sources)
         )
+
+    def test_repository_config_declares_watcher_policy(self):
+        root = Path(__file__).resolve().parent.parent
+        config = json.loads(
+            (root / ".github/bos-universal-config.json").read_text(encoding="utf-8")
+        )
+        watcher = config["upstream_watcher"]
+        assert watcher == {
+            "source": "github_release",
+            "upstream_repo": "blackoutsecure/bos-upstream-watcher",
+            "include_prereleases": False,
+            "strip_v_prefix": True,
+        }
 
     def test_hub_only_keys_are_ignored(self, tmp_path):
         """`target_workflows` belongs to the kicker; it must not fail here."""
@@ -304,7 +325,7 @@ class TestHubIntegrationContract:
         assert resolved.env["PACKAGE_NAME"] == "@actions/core"
         # Hub callers never send an empty tracker path, but if they do the
         # bundled default applies rather than silently disabling tracking.
-        assert resolved.env["TRACKER_PATH"] == ".github/upstream/tracked-release.json"
+        assert resolved.env["TRACKER_PATH"] == ".github/tracked-release.json"
 
     def test_missing_global_policy_is_not_fatal(self, tmp_path):
         """`use_global_config: auto` tolerates a hub checkout that did not

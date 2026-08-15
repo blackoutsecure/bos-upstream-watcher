@@ -83,9 +83,7 @@ def http_request(
         except urllib.error.HTTPError as exc:
             if exc.code < 500:
                 # 4xx is terminal — retrying won't help.
-                err_headers = (
-                    {k.lower(): v for k, v in exc.headers.items()} if exc.headers else {}
-                )
+                err_headers = {k.lower(): v for k, v in exc.headers.items()} if exc.headers else {}
                 return exc.code, exc.read() or b"", err_headers
             last_err = exc
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
@@ -462,9 +460,7 @@ def _split_two_segments(path: str, registry: str, image_ref: str) -> tuple[str, 
 
 def _list_dockerhub_tags(ns: str, name: str) -> list[str]:
     all_tags: list[str] = []
-    next_url: str | None = (
-        f"https://hub.docker.com/v2/repositories/{ns}/{name}/tags/?page_size=100"
-    )
+    next_url: str | None = f"https://hub.docker.com/v2/repositories/{ns}/{name}/tags/?page_size=100"
     pages = 0
     while next_url and pages < 5:
         status, body, _ = http_request(next_url, accept_json=True)
@@ -486,10 +482,7 @@ def _list_ghcr_tags(owner: str, image: str) -> list[str]:
     # requested repo. For PRIVATE repos it returns 200 with an unscoped
     # token that fails on /v2 (giving us a 401 to diagnose), so the token
     # call itself doesn't need a special-case.
-    token_url = (
-        f"https://ghcr.io/token?service=ghcr.io"
-        f"&scope=repository:{owner}/{image}:pull"
-    )
+    token_url = f"https://ghcr.io/token?service=ghcr.io&scope=repository:{owner}/{image}:pull"
     status, body, _ = http_request(token_url, accept_json=True)
     if status >= 400:
         die(f"GHCR token endpoint returned {status} for {owner}/{image}")
@@ -578,7 +571,9 @@ _REGISTRIES: dict[str, _RegistryConfig] = {
         normalize_path=lambda p: p,
         list_tags=_list_ghcr_tags,
         # GitHub's container package URL uses the IMAGE name, not the owner.
-        source_url=lambda owner, image: f"https://github.com/{owner}/{image}/pkgs/container/{image}",
+        source_url=lambda owner, image: (
+            f"https://github.com/{owner}/{image}/pkgs/container/{image}"
+        ),
     ),
     "quay.io": _RegistryConfig(
         normalize_path=lambda p: p,
