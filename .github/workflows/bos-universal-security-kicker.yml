@@ -1,9 +1,7 @@
-# Managed by https://github.com/blackoutsecure/bos-automation-hub —
-# do not edit. To modify, update the `bos_universal_security` service in
-# .github/actions/sync-managed-files/sync.py.
-#
+# Managed by Blackout Secure Managed File Sync — configure services in .github/bos-universal-config.json.
+# Do not edit — every sync run overwrites this file.
 # Blackout Secure universal security and policy kicker (hub-managed).
-# Customize via `bos-universal-config.json` (repo root), not this file.
+# Customize via `.github/bos-universal-config.json`, not this file.
 # Schema docs: https://github.com/blackoutsecure/bos-automation-hub
 name: Blackout Secure Universal Security
 run-name: >-
@@ -18,6 +16,8 @@ run-name: >-
 "on":
   pull_request:
     branches: [main, dev]
+  push:
+    branches: [main, dev]
   merge_group:
   workflow_dispatch:
 
@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 jobs:
-  parse-config:
+  parse_config:
     name: Parse universal config
     # Resolve runner from org-shared `vars.DEFAULT_RUNNER` when set,
     # supporting both bare label and JSON-array formats. Fallback to
@@ -33,34 +33,29 @@ jobs:
     runs-on: ${{ fromJSON(startsWith(vars.DEFAULT_RUNNER || 'ubuntu-latest', '[') && (vars.DEFAULT_RUNNER || 'ubuntu-latest') || format('"{0}"', vars.DEFAULT_RUNNER || 'ubuntu-latest')) }}
     timeout-minutes: 2
     outputs:
-      target_ref: ${{ steps.target-ref.outputs.ref }}
+      target_ref: ${{ steps.target_ref.outputs.ref }}
     steps:
-      - name: Checkout
+      - name: Checkout hub resolver
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
-      # `uses:` refs cannot be dynamic, so resolve which hub branch this
-      # run targets here and pick the matching static-ref job below.
+          repository: blackoutsecure/bos-automation-hub
+          ref: ${{ github.ref_name == 'dev' && 'dev' || 'main' }}
+          path: hub-runtime
+          sparse-checkout: .github/actions/shared/resolve-hub-ref
+          sparse-checkout-cone-mode: false
       - name: Resolve target hub ref
-        id: target-ref
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          case "${EVENT_NAME}" in
-            pull_request|pull_request_target) ref="${BASE_REF}" ;;
-            merge_group) ref="${MERGE_GROUP_BASE_REF#refs/heads/}" ;;
-            *) ref="${REF_NAME}" ;;
-          esac
-          [ "${ref}" = "dev" ] || ref="main"
-          echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
+        id: target_ref
+        uses: ./hub-runtime/.github/actions/shared/resolve-hub-ref
+        with:
+          event_name: ${{ github.event_name }}
+          base_ref: ${{ github.base_ref }}
+          merge_group_base_ref: ${{ github.event.merge_group.base_ref }}
+          ref_name: ${{ github.ref_name }}
 
   security-dev:
     name: security (dev)
-    needs: parse-config
-    if: needs.parse-config.outputs.target_ref == 'dev'
+    needs: parse_config
+    if: needs.parse_config.outputs.target_ref == 'dev'
     permissions:
       contents: read
       security-events: write
@@ -69,13 +64,12 @@ jobs:
     uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-security.yml@dev
     with:
       config_authoritative: true
-    secrets:
-      scanning_pat: ${{ secrets.SCANNING_PAT }}
+    secrets: inherit
 
   security-main:
     name: security (main)
-    needs: parse-config
-    if: needs.parse-config.outputs.target_ref == 'main'
+    needs: parse_config
+    if: needs.parse_config.outputs.target_ref == 'main'
     permissions:
       contents: read
       security-events: write
@@ -84,5 +78,4 @@ jobs:
     uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-security.yml@main
     with:
       config_authoritative: true
-    secrets:
-      scanning_pat: ${{ secrets.SCANNING_PAT }}
+    secrets: inherit

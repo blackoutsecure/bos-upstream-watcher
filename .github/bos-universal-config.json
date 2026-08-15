@@ -1,15 +1,76 @@
 {
-  "general": {
-    "copyright_holder": "Blackout Secure",
-    "copyright_year_start": 2025,
-    "maintainers_team": "@blackoutsecure/maintainers",
-    "license_type": "apache-2.0",
-    "dependabot_target_branch": "dev",
-    "dotfiles_workstream": "action",
-    "dotfiles_sync_strategy": "auto",
-    "dotfiles_mode": "managed_section",
-    "dotfiles_conflict_precedence": "central",
-    "target_repo_role": "consumer"
+  "organization": {
+    "runners": {
+      "default": "ubuntu-latest",
+      "x64": "ubuntu-latest",
+      "arm64": "ubuntu-24.04-arm"
+    },
+    "reporting": {
+      "enable_job_summary": true,
+      "enable_annotations": true,
+      "title_prefix": "Blackout Secure",
+      "fail_on": "fail"
+    },
+    "defaults": {
+      "timeout_minutes": 30
+    }
+  },
+  "managed_file_sync": {
+    "mode": "commit",
+    "services": [
+      "baseline",
+      "bos_universal_security_kicker",
+      "bos_universal_sync_kicker",
+      "bos_universal_marketplace_kicker",
+      "bos_universal_action_test_kicker"
+    ],
+    "exclude_services": [
+      "shellcheck",
+      "prettier"
+    ],
+    "ai": {
+      "enable_ai_drift_summary": true,
+      "ai_drift_summary_provider": "auto",
+      "enable_ai_error_remediation": true,
+      "ai_error_remediation_provider": "auto",
+      "local_heuristic_fallback": true
+    },
+    "service_definitions": {
+      "dependabot_actions": {
+        "mode": "block",
+        "description": "Dependabot updates for GitHub Actions, targeted at the dev branch where the workflows live.",
+        "files": [
+          {
+            "path": ".github/dependabot.yml",
+            "scaffold": [
+              "version: 2",
+              "updates:"
+            ],
+            "content_lines": [
+              "  - package-ecosystem: github-actions",
+              "    directory: /",
+              "    target-branch: dev",
+              "    schedule:",
+              "      interval: weekly",
+              "      day: monday",
+              "      time: \"06:00\"",
+              "      timezone: \"Etc/UTC\"",
+              "    open-pull-requests-limit: 5",
+              "    commit-message:",
+              "      prefix: \"ci\"",
+              "      include: scope",
+              "    labels:",
+              "      - dependencies",
+              "      - github-actions",
+              "    groups:",
+              "      github-actions:",
+              "        patterns:",
+              "          - \"actions/*\""
+            ]
+          }
+        ]
+      }
+    }
   },
   "security": {
     "enable_lint": true,
@@ -34,7 +95,7 @@
     "smoke_test_config": {
       "source": "npm",
       "package_name": "@actions/core",
-      "tracker_path": ""
+      "tracker_path": "none"
     },
     "timeout_pytest": 10,
     "timeout_smoke": 5
@@ -58,11 +119,12 @@
     ],
     "blocked_paths": [
       ".github/workflows/",
+      ".github/bos-universal-config.json",
       ".editorconfig",
       ".gitattributes",
       ".gitignore",
+      ".markdownlint.json",
       ".markdownlint.yaml",
-      "bos-universal-config.json",
       "pyproject.toml",
       "requirements-dev.txt",
       "test/"
@@ -87,24 +149,5 @@
       "show_deployments": false,
       "show_packages": false
     }
-  },
-  "sync": {
-    "mode": "commit",
-    "services": [
-      "common",
-      "python",
-      "lf_line_endings",
-      "markdownlint",
-      "dependabot_actions",
-      "dependabot_pip",
-      "license",
-      "notice_apache2",
-      "codeowners",
-      "bos_universal_config",
-      "bos_universal_security",
-      "bos_universal_marketplace",
-      "bos_universal_action_test",
-      "bos_universal_sync"
-    ]
   }
 }

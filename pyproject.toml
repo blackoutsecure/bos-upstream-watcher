@@ -14,7 +14,13 @@ ignore = [
 "test/**" = ["S", "B"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["discover"]
+known-first-party = [
+  "discover",
+  "watcher_ai",
+  "watcher_config",
+  "watcher_metadata",
+  "watcher_reporting",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]

@@ -13,9 +13,11 @@
 # override below is what keeps PRs landing on `dev` (where the CI
 # workflows live).
 #
-# `target-branch:` is rendered by the hub from
-# `general.dependabot_target_branch` in `bos-universal-config.json` —
-# change it there, not here.
+# `target-branch:` is part of the managed block content. The GitHub Actions
+# ecosystem block is overridden in
+# `.github/bos-universal-config.json` under
+# `managed_file_sync.service_definitions.dependabot_actions` — change it
+# there, not here, or the next sync run will overwrite it.
 
 version: 2
 updates:

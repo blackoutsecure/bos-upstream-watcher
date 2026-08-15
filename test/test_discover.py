@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import discover
+import watcher_config
 
 # ---------------------------------------------------------------------------
 # semver_key + pick_highest
@@ -222,6 +223,11 @@ def _env(tracker_path: str) -> dict[str, str]:
     }
 
 
+def _main_env(tracker_path: str) -> dict[str, str]:
+    """Inputs for `main()`: AI off so no test ever reaches a provider."""
+    return {**_env(tracker_path), "ENABLE_AI": "false"}
+
+
 class TestRunTrackerFile:
     def test_first_run_writes_file_and_reports_changed(self, tmp_path, monkeypatch):
         _install_stub_provider(monkeypatch, "1.2.3")
@@ -274,7 +280,7 @@ class TestMain:
         tracker = tmp_path / "tracker.json"
 
         monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
-        for k, v in _env(str(tracker)).items():
+        for k, v in _main_env(str(tracker)).items():
             monkeypatch.setenv(k, v)
 
         rc = discover.main()
@@ -284,6 +290,9 @@ class TestMain:
         assert "changed=true" in content
         assert "version=9.9.9" in content
         assert "tag=v9.9.9" in content
+        assert "update_type=unknown" in content
+        assert "ai_status=" in content
+        assert '"name":"bos-upstream-watcher"' in content
 
 
 # ---------------------------------------------------------------------------
@@ -341,7 +350,9 @@ class TestActionYaml:
         assert "marketplace.source_branch || github.event.repository.default_branch" in marketplace_body
         assert "marketplace.target_branch || 'main'" in marketplace_body
 
-        config = json.loads((root / "bos-universal-config.json").read_text(encoding="utf-8"))
+        config = json.loads(
+            (root / ".github/bos-universal-config.json").read_text(encoding="utf-8")
+        )
         marketplace = config["marketplace"]
         assert marketplace["enabled"] is True
         assert marketplace["source_branch"] == "dev"
@@ -353,17 +364,15 @@ class TestActionYaml:
             "LICENSE",
             "NOTICE",
         ]
-        assert marketplace["blocked_paths"] == [
+        # Everything that must never reach the curated Marketplace branch.
+        for blocked in (
             ".github/workflows/",
-            ".editorconfig",
-            ".gitattributes",
-            ".gitignore",
-            ".markdownlint.yaml",
-            "bos-universal-config.json",
+            ".github/bos-universal-config.json",
             "pyproject.toml",
             "requirements-dev.txt",
             "test/",
-        ]
+        ):
+            assert blocked in marketplace["blocked_paths"]
         assert marketplace["required_paths"] == [
             ".github/dependabot.yml",
             "action.yml",
@@ -390,14 +399,14 @@ class TestActionYaml:
         assert "bos-universal-security.yml@main" in security_body
         assert "bos-universal-security.yml@dev" in security_body
         assert "config_authoritative: true" in security_body
-        assert "scanning_pat: ${{ secrets.SCANNING_PAT }}" in security_body
+        assert "secrets: inherit" in security_body
 
         sync_body = (workflow_dir / "bos-universal-sync-kicker.yml").read_text(
             encoding="utf-8"
         )
         assert "bos-universal-sync.yml@main" in sync_body
         assert "bos-universal-sync.yml@dev" in sync_body
-        assert "'bos-universal-config.json'" in sync_body
+        assert "'.github/bos-universal-config.json'" in sync_body
         assert "github.event.repository.default_branch" in sync_body
         assert "mode: ${{ inputs.mode || '' }}" in sync_body
 
@@ -413,18 +422,19 @@ class TestActionYaml:
             encoding="utf-8"
         )
         for body in (security_body, sync_body, marketplace_body, action_test_body):
-            assert body.startswith(
-                "# Managed by https://github.com/blackoutsecure/bos-automation-hub"
-            )
+            assert body.startswith("# Managed by Blackout Secure Managed File Sync")
 
         assert not (root / "bos-launchpad-config.json").exists()
-        config = json.loads((root / "bos-universal-config.json").read_text(encoding="utf-8"))
+        assert not (root / "bos-universal-config.json").exists()
+        config = json.loads(
+            (root / ".github/bos-universal-config.json").read_text(encoding="utf-8")
+        )
         assert config["security"]["enable_python_lint"] is True
         assert config["security"]["python_version"] == "3.12"
         assert config["security"]["enable_shell_lint"] is False
         assert config["security"]["readme_header_profile"] == "marketplace"
-        assert config["general"]["dotfiles_workstream"] == "action"
-        assert config["general"]["dependabot_target_branch"] == "dev"
+        assert config["organization"]["reporting"]["enable_job_summary"] is True
+        assert config["organization"]["reporting"]["fail_on"] == "fail"
         assert config["action_test"]["python_versions"] == ["3.10", "3.11", "3.12"]
         assert config["action_test"]["os_matrix"] == [
             "ubuntu-latest",
@@ -433,25 +443,46 @@ class TestActionYaml:
         ]
         assert config["action_test"]["enable_smoke_test"] is True
         assert config["action_test"]["smoke_test_config"]["source"] == "npm"
-        assert config["sync"] == {
-            "mode": "commit",
-            "services": [
-                "common",
-                "python",
-                "lf_line_endings",
-                "markdownlint",
-                "dependabot_actions",
-                "dependabot_pip",
-                "license",
-                "notice_apache2",
-                "codeowners",
-                "bos_universal_config",
-                "bos_universal_security",
-                "bos_universal_marketplace",
-                "bos_universal_action_test",
-                "bos_universal_sync",
-            ],
+        # `''` now inherits the configured tracker path, so the smoke test has
+        # to disable the tracker explicitly.
+        assert config["action_test"]["smoke_test_config"]["tracker_path"] == "none"
+
+    def test_managed_file_sync_uses_known_service_names(self):
+        """Every selected service must exist in the published sync catalog.
+
+        The engine hard-fails with a config error when a name has no service
+        definition, so an unknown name here breaks the whole sync run.
+        """
+        root = Path(__file__).resolve().parent.parent
+        config = json.loads(
+            (root / ".github/bos-universal-config.json").read_text(encoding="utf-8")
+        )
+        sync = config["managed_file_sync"]
+        known = {
+            "baseline",
+            "quality_baseline",
+            "common",
+            "editorconfig",
+            "lf_line_endings",
+            "markdownlint",
+            "dependabot_actions",
+            "dependabot_pip",
+            "prettier",
+            "shellcheck",
+            "bos_universal_security_kicker",
+            "bos_universal_sync_kicker",
+            "bos_universal_marketplace_kicker",
+            "bos_universal_action_test_kicker",
         }
+        assert set(sync["services"]) <= known
+        assert set(sync["exclude_services"]) <= known
+        assert set(sync["service_definitions"]) <= known
+        assert sync["mode"] == "commit"
+        # The dev/main split needs Dependabot PRs to land on dev.
+        actions_lines = sync["service_definitions"]["dependabot_actions"]["files"][0][
+            "content_lines"
+        ]
+        assert "    target-branch: dev" in actions_lines
 
 
 # ---------------------------------------------------------------------------
@@ -890,35 +921,65 @@ class TestIncludePrereleases:
 
 
 class TestStepSummary:
+    def _report(self, monkeypatch, tracker_path=""):
+        env = _env(tracker_path)
+        outputs = discover.run(env)
+        config = watcher_config.resolve(
+            {**env, "ENABLE_AI": "false"}, root=Path(__file__).resolve().parent.parent
+        )
+        report = discover.build_report(env, outputs, config)
+        discover.apply_ai_digest(report, outputs, config)
+        return report, outputs, config
+
     def test_writes_when_env_set(self, tmp_path, monkeypatch):
         _install_stub_provider(monkeypatch, "1.2.3")
         summary = tmp_path / "summary.md"
         monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
-        discover.run(_env(""))
+        report, _, config = self._report(monkeypatch)
+        discover.emit_report(report, config.reporting)
         body = summary.read_text(encoding="utf-8")
-        assert "## 🔍 Upstream Watcher" in body
-        assert "`github_release`" in body
-        assert "`stub/repo`" in body
-        assert "`v1.2.3`" in body
-        assert "`1.2.3`" in body
-        assert "2024-09-12T18:23:00Z" in body  # published_at row
-        assert "v1.2.3" in body  # release name row
+        assert "# Blackout Secure Upstream Watcher Report" in body
+        assert "## Executive summary" in body
+        assert "## Configuration used" in body
+        assert "## Detailed Findings" in body
+        assert "UW-RES-001" in body
+        assert "UW-CHG-001" in body
+        assert "UW-TRK-001" in body
+        assert "github_release" in body
+        assert "stub/repo" in body
+        assert "1.2.3" in body
 
     def test_skipped_when_env_unset(self, tmp_path, monkeypatch):
         _install_stub_provider(monkeypatch, "1.2.3")
         monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+        report, _, config = self._report(monkeypatch)
         # Should not raise and should not create any summary file.
-        discover.run(_env(""))
+        discover.emit_report(report, config.reporting)
 
     def test_io_error_does_not_fail_run(self, tmp_path, monkeypatch):
-        """If GITHUB_STEP_SUMMARY points to an unwritable path, run() must
-        still succeed — summary is best-effort, not load-bearing."""
+        """If GITHUB_STEP_SUMMARY points to an unwritable path, the run must
+        still succeed — the report is best-effort, not load-bearing."""
         _install_stub_provider(monkeypatch, "1.2.3")
         unwritable = tmp_path / "no" / "such" / "dir" / "summary.md"
         monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(unwritable))
+        report, outputs, config = self._report(monkeypatch)
         # Must not raise.
-        out = discover.run(_env(""))
-        assert out["version"] == "1.2.3"
+        discover.emit_report(report, config.reporting)
+        assert outputs["version"] == "1.2.3"
+
+    def test_disabled_by_input(self, tmp_path, monkeypatch):
+        _install_stub_provider(monkeypatch, "1.2.3")
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        env = _env("")
+        outputs = discover.run(env)
+        config = watcher_config.resolve(
+            {**env, "ENABLE_AI": "false", "ENABLE_JOB_SUMMARY": "false"},
+            root=Path(__file__).resolve().parent.parent,
+        )
+        report = discover.build_report(env, outputs, config)
+        discover.emit_report(report, config.reporting)
+        assert not summary.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -943,7 +1004,7 @@ class TestRunExtraOutputs:
         _install_stub_provider(monkeypatch, "1.2.3")
         out_file = tmp_path / "gh-out"
         monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
-        env = _env("")
+        env = _main_env("none")
         for k, v in env.items():
             monkeypatch.setenv(k, v)
         rc = discover.main()
