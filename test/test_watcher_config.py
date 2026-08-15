@@ -209,6 +209,113 @@ class TestValidation:
             watcher_config.resolve(_inputs(), root=tmp_path)
 
 
+class TestHubIntegrationContract:
+    """The hub's `monitor-upstream-release.yml` calls this action with an
+    explicit repo config path, the hub-checked-out global policy file, and
+    every provider input forwarded from `upstream_watcher`. Breaking any of
+    those breaks `bos-universal-upstream-kicker.yml` in every consumer repo.
+    """
+
+    def _hub_repo(self, tmp_path, watcher=None):
+        _write(
+            tmp_path / ".github/bos-universal-config.json",
+            {
+                "organization": {"reporting": {"fail_on": "fail"}},
+                "upstream_watcher": watcher
+                if watcher is not None
+                else {
+                    "source": "github_release",
+                    "upstream_repo": "nginx/nginx",
+                    "tracker_path": ".github/upstream/nginx.json",
+                    # Consumed by the hub kicker, not by this action.
+                    "target_workflows": "release.yml\ndocker-build.yml",
+                },
+            },
+        )
+        # Mirrors hub-config/sync-files/config/upstream-watcher-global-config.json.
+        _write(
+            tmp_path / "hub-config/sync-files/config/upstream-watcher-global-config.json",
+            {
+                "upstream_watcher": {
+                    "strip_v_prefix": True,
+                    "include_prereleases": False,
+                    "user_agent": "blackoutsecure-bos-upstream-watcher",
+                    "ai": {
+                        "enable_ai_release_summary": True,
+                        "enable_ai_error_remediation": True,
+                        "ai_release_summary_provider": "auto",
+                        "local_heuristic_fallback": True,
+                        "timeout_seconds": 20,
+                    },
+                }
+            },
+        )
+
+    def _hub_inputs(self, **overrides):
+        """The exact input set the hub workflow renders."""
+        inputs = _inputs(
+            CONFIG_PATH=".github/bos-universal-config.json",
+            GLOBAL_CONFIG_PATH="hub-config/sync-files/config/upstream-watcher-global-config.json",
+            USE_GLOBAL_CONFIG="auto",
+            # Forwarded by the kicker from `upstream_watcher`, plus the
+            # reusable workflow's own non-empty defaults.
+            SOURCE="github_release",
+            UPSTREAM_REPO="nginx/nginx",
+            VERSION_FILE_PATH="version",
+            INCLUDE_PRERELEASES="false",
+            STRIP_V_PREFIX="true",
+            TRACKER_PATH=".github/upstream/nginx.json",
+        )
+        inputs.update(overrides)
+        return inputs
+
+    def test_hub_invocation_resolves(self, tmp_path):
+        self._hub_repo(tmp_path)
+        resolved = watcher_config.resolve(self._hub_inputs(), root=tmp_path)
+        assert resolved.env["SOURCE"] == "github_release"
+        assert resolved.env["UPSTREAM_REPO"] == "nginx/nginx"
+        assert resolved.env["TRACKER_PATH"] == ".github/upstream/nginx.json"
+        assert resolved.env["USER_AGENT_OVERRIDE"] == "blackoutsecure-bos-upstream-watcher"
+        assert resolved.ai.enable_ai_release_summary is True
+        assert resolved.reporting.fail_on == "fail"
+        assert resolved.repository_config == ".github/bos-universal-config.json"
+        assert "global config (hub-config/sync-files/config/upstream-watcher-global-config.json)" in (
+            resolved.sources
+        )
+
+    def test_hub_only_keys_are_ignored(self, tmp_path):
+        """`target_workflows` belongs to the kicker; it must not fail here."""
+        self._hub_repo(tmp_path)
+        resolved = watcher_config.resolve(self._hub_inputs(), root=tmp_path)
+        assert resolved.section["target_workflows"] == "release.yml\ndocker-build.yml"
+
+    def test_config_only_repo_needs_no_forwarded_inputs(self, tmp_path):
+        """A consumer that sets everything in config still resolves when the
+        kicker forwards empty strings for unset keys."""
+        self._hub_repo(
+            tmp_path,
+            watcher={"source": "npm", "package_name": "@actions/core"},
+        )
+        resolved = watcher_config.resolve(
+            self._hub_inputs(SOURCE="", UPSTREAM_REPO="", TRACKER_PATH=""),
+            root=tmp_path,
+        )
+        assert resolved.env["SOURCE"] == "npm"
+        assert resolved.env["PACKAGE_NAME"] == "@actions/core"
+        # Hub callers never send an empty tracker path, but if they do the
+        # bundled default applies rather than silently disabling tracking.
+        assert resolved.env["TRACKER_PATH"] == ".github/upstream/tracked-release.json"
+
+    def test_missing_global_policy_is_not_fatal(self, tmp_path):
+        """`use_global_config: auto` tolerates a hub checkout that did not
+        land the policy file."""
+        self._hub_repo(tmp_path)
+        (tmp_path / "hub-config/sync-files/config/upstream-watcher-global-config.json").unlink()
+        resolved = watcher_config.resolve(self._hub_inputs(), root=tmp_path)
+        assert resolved.global_config == ""
+        assert resolved.env["SOURCE"] == "github_release"
+
+
 class TestPackageIdentity:
     def test_reserved_identity_keys_cannot_be_overridden(self, tmp_path):
         _write(
