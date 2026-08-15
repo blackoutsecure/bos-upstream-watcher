@@ -1,0 +1,110 @@
+{
+  "general": {
+    "copyright_holder": "Blackout Secure",
+    "copyright_year_start": 2025,
+    "maintainers_team": "@blackoutsecure/maintainers",
+    "license_type": "apache-2.0",
+    "dependabot_target_branch": "dev",
+    "dotfiles_workstream": "action",
+    "dotfiles_sync_strategy": "auto",
+    "dotfiles_mode": "managed_section",
+    "dotfiles_conflict_precedence": "central",
+    "target_repo_role": "consumer"
+  },
+  "security": {
+    "enable_lint": true,
+    "enable_node_lint": false,
+    "enable_python_lint": true,
+    "python_version": "3.12",
+    "enable_shell_lint": false,
+    "enable_dependency_review": true,
+    "enable_code_scan": true,
+    "enable_pinned_actions_check": true,
+    "enable_pr_title_check": true,
+    "enable_readme_header_check": true,
+    "readme_header_profile": "marketplace"
+  },
+  "action_test": {
+    "python_versions": ["3.10", "3.11", "3.12"],
+    "os_matrix": ["ubuntu-latest", "macos-latest", "windows-latest"],
+    "requirements_file": "requirements-dev.txt",
+    "pytest_args": "-q",
+    "enable_smoke_test": true,
+    "smoke_trigger": "push-dev",
+    "smoke_test_config": {
+      "source": "npm",
+      "package_name": "@actions/core",
+      "tracker_path": ""
+    },
+    "timeout_pytest": 10,
+    "timeout_smoke": 5
+  },
+  "marketplace": {
+    "enabled": true,
+    "action_yml_path": "action.yml",
+    "source_branch": "dev",
+    "target_branch": "main",
+    "fail_on_warning": false,
+    "require_security": "warn",
+    "require_code_of_conduct": "warn",
+    "require_contributing": "warn",
+    "run_branding_preview": true,
+    "allowlist_paths": [
+      "action.yml",
+      "src",
+      "README.md",
+      "LICENSE",
+      "NOTICE"
+    ],
+    "blocked_paths": [
+      ".github/workflows/",
+      ".editorconfig",
+      ".gitattributes",
+      ".gitignore",
+      ".markdownlint.yaml",
+      "bos-universal-config.json",
+      "pyproject.toml",
+      "requirements-dev.txt",
+      "test/"
+    ],
+    "required_paths": [
+      ".github/dependabot.yml",
+      "action.yml",
+      "src",
+      "LICENSE",
+      "NOTICE",
+      "README.md"
+    ],
+    "include_dependabot_config": true,
+    "include_github_metadata": false,
+    "repo_metadata": {
+      "enable": false,
+      "description": "Detect the latest upstream version from GitHub releases, tags, branch files, container registries, npm, PyPI, or any URL — and report whether it changed.",
+      "homepage": "https://github.com/marketplace/actions/blackout-secure-upstream-watcher",
+      "generate_topics": true,
+      "topics_fallback": "github-actions,upstream,release-monitoring,semver,automation,dependency-tracking,python",
+      "show_releases": true,
+      "show_deployments": false,
+      "show_packages": false
+    }
+  },
+  "sync": {
+    "mode": "commit",
+    "services": [
+      "common",
+      "python",
+      "lf_line_endings",
+      "markdownlint",
+      "dependabot_actions",
+      "dependabot_pip",
+      "license",
+      "notice_apache2",
+      "codeowners",
+      "bos_universal_config",
+      "bos_universal_security",
+      "bos_universal_marketplace",
+      "bos_universal_action_test",
+      "bos_universal_sync"
+    ]
+  }
+}

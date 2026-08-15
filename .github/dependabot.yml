@@ -2,22 +2,20 @@
 #
 # This repo follows the Blackout Secure Marketplace Action dev/main
 # split:
-#   * `dev`  — workflow files (`marketplace-ci.yml`, `marketplace-guard.yml`,
-#              `release.yml`) live here. Dependabot PRs target THIS branch
-#              so CI runs against them.
+#   * `dev`  — workflow files (the hub-managed `bos-universal-*` kickers)
+#              live here. Dependabot PRs target THIS branch so CI runs
+#              against them.
 #   * `main` — curated Marketplace artifact (no workflow files). Receives
 #              allowlist promotes from `dev` via the hub release pipeline.
 #
-# Dependabot reads its config only from the default branch (`main`),
-# so this file is synced to `main` on every promote and the
-# `target-branch: dev` override below is what keeps PRs landing on
-# `dev` (where the CI workflows live).
+# Dependabot reads its config only from the default branch, so this file
+# is synced to `main` on every promote and the `target-branch: dev`
+# override below is what keeps PRs landing on `dev` (where the CI
+# workflows live).
 #
-# The `target-branch: dev` knob is intentionally INSIDE the managed
-# marker blocks; the hub's upstream template doesn't yet expose this
-# field, so a future sync would clobber it without this header
-# reminder. Drop the override (and this comment) once the hub template
-# adds a first-class `target_branch` parameter.
+# `target-branch:` is rendered by the hub from
+# `general.dependabot_target_branch` in `bos-universal-config.json` —
+# change it there, not here.
 
 version: 2
 updates:

@@ -325,22 +325,26 @@ class TestActionYaml:
         assert "branches: [main, dev]" in marketplace_body
         assert "pull_request_target:" in marketplace_body
         assert "branches: [main]" in marketplace_body
-        assert "options: [validate, name-check, release]" in marketplace_body
-        assert "marketplace-action-ci.yml@main" in marketplace_body
+        assert "options: [validate, name-check, release, metadata]" in marketplace_body
+        # Kicker dispatches to the hub ref matching the branch under test.
+        assert "bos-universal-marketplace.yml@main" in marketplace_body
+        assert "bos-universal-marketplace.yml@dev" in marketplace_body
+        # Guard / promote / metadata always run from the stable hub ref.
         assert "marketplace-repo-guard.yml@main" in marketplace_body
         assert "release-promote.yml@main" in marketplace_body
-        assert "launchpad-config@main" in marketplace_body
-        assert "github.event.repository.default_branch" in marketplace_body
-        assert "marketplace-action-ci.yml@dev" not in marketplace_body
+        assert "repo-metadata-sync.yml@main" in marketplace_body
+        assert "shared/universal-config@main" in marketplace_body
+        assert "shared/universal-config@dev" not in marketplace_body
         assert "release-promote.yml@dev" not in marketplace_body
-        assert "launchpad-config@dev" not in marketplace_body
+        assert "github.event.repository.default_branch" in marketplace_body
         assert "cfg: ${{ steps.config.outputs.cfg }}" in marketplace_body
         assert "marketplace.source_branch || github.event.repository.default_branch" in marketplace_body
         assert "marketplace.target_branch || 'main'" in marketplace_body
 
-        config = json.loads((root / "bos-launchpad-config.json").read_text(encoding="utf-8"))
+        config = json.loads((root / "bos-universal-config.json").read_text(encoding="utf-8"))
         marketplace = config["marketplace"]
         assert marketplace["enabled"] is True
+        assert marketplace["source_branch"] == "dev"
         assert marketplace["target_branch"] == "main"
         assert marketplace["allowlist_paths"] == [
             "action.yml",
@@ -355,6 +359,7 @@ class TestActionYaml:
             ".gitattributes",
             ".gitignore",
             ".markdownlint.yaml",
+            "bos-universal-config.json",
             "pyproject.toml",
             "requirements-dev.txt",
             "test/",
@@ -369,6 +374,8 @@ class TestActionYaml:
         ]
         assert marketplace["include_dependabot_config"] is True
         assert marketplace["include_github_metadata"] is False
+        # Metadata sync needs an admin PAT; ship the settings disabled.
+        assert marketplace["repo_metadata"]["enable"] is False
 
         assert not (workflow_dir / "lint.yml").exists()
         for retired_name in ("marketplace-ci.yml", "marketplace-guard.yml", "release.yml"):
@@ -380,41 +387,70 @@ class TestActionYaml:
         security_body = (workflow_dir / "bos-universal-security-kicker.yml").read_text(
             encoding="utf-8"
         )
-        assert "bos-gate.yml@main" in security_body
-        assert "launchpad-config@main" in security_body
-        assert "bos-gate.yml@dev" not in security_body
-        assert "launchpad-config@dev" not in security_body
-        assert "enable_python_lint:" in security_body
+        assert "bos-universal-security.yml@main" in security_body
+        assert "bos-universal-security.yml@dev" in security_body
+        assert "config_authoritative: true" in security_body
+        assert "scanning_pat: ${{ secrets.SCANNING_PAT }}" in security_body
 
         sync_body = (workflow_dir / "bos-universal-sync-kicker.yml").read_text(
             encoding="utf-8"
         )
-        assert "sync-managed-files.yml@main" in sync_body
-        assert "bos-launchpad-config.json" in sync_body
-        assert "bos-managed-files.yaml" in sync_body
+        assert "bos-universal-sync.yml@main" in sync_body
+        assert "bos-universal-sync.yml@dev" in sync_body
+        assert "'bos-universal-config.json'" in sync_body
         assert "github.event.repository.default_branch" in sync_body
         assert "mode: ${{ inputs.mode || '' }}" in sync_body
 
-        config = json.loads((root / "bos-launchpad-config.json").read_text(encoding="utf-8"))
-        assert config["gate"] == {
-            "enable_lint": True,
-            "enable_python_lint": True,
-            "python_version": "3.12",
-            "enable_shell_lint": False,
-        }
-        assert config["sync_files"] == {
+        action_test_body = (workflow_dir / "bos-universal-action-test-kicker.yml").read_text(
+            encoding="utf-8"
+        )
+        assert "bos-universal-action-test.yml@main" in action_test_body
+        assert "bos-universal-action-test.yml@dev" in action_test_body
+        # The hub action-test surface replaces the hand-rolled matrix workflow.
+        assert not (workflow_dir / "test.yml").exists()
+
+        marketplace_body = (workflow_dir / "bos-universal-marketplace-kicker.yml").read_text(
+            encoding="utf-8"
+        )
+        for body in (security_body, sync_body, marketplace_body, action_test_body):
+            assert body.startswith(
+                "# Managed by https://github.com/blackoutsecure/bos-automation-hub"
+            )
+
+        assert not (root / "bos-launchpad-config.json").exists()
+        config = json.loads((root / "bos-universal-config.json").read_text(encoding="utf-8"))
+        assert config["security"]["enable_python_lint"] is True
+        assert config["security"]["python_version"] == "3.12"
+        assert config["security"]["enable_shell_lint"] is False
+        assert config["security"]["readme_header_profile"] == "marketplace"
+        assert config["general"]["dotfiles_workstream"] == "action"
+        assert config["general"]["dependabot_target_branch"] == "dev"
+        assert config["action_test"]["python_versions"] == ["3.10", "3.11", "3.12"]
+        assert config["action_test"]["os_matrix"] == [
+            "ubuntu-latest",
+            "macos-latest",
+            "windows-latest",
+        ]
+        assert config["action_test"]["enable_smoke_test"] is True
+        assert config["action_test"]["smoke_test_config"]["source"] == "npm"
+        assert config["sync"] == {
+            "mode": "commit",
             "services": [
                 "common",
-                "lf_line_endings",
                 "python",
+                "lf_line_endings",
+                "markdownlint",
                 "dependabot_actions",
                 "dependabot_pip",
-                "bos_launchpad_config",
+                "license",
+                "notice_apache2",
+                "codeowners",
+                "bos_universal_config",
                 "bos_universal_security",
                 "bos_universal_marketplace",
+                "bos_universal_action_test",
                 "bos_universal_sync",
             ],
-            "mode": "commit",
         }
 
 

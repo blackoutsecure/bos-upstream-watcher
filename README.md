@@ -429,10 +429,16 @@ which applies to every repo in the org. The repo-specific bits are
 below.
 
 All PRs target the **`dev`** branch. The `main` branch is built by
-the Marketplace release pipeline (the launchpad reusable in
+the Marketplace release pipeline (the universal Marketplace reusable in
 [bos-automation-hub](https://github.com/blackoutsecure/bos-automation-hub))
 and is read-only to humans — PRs opened against `main` will be
 closed.
+
+CI, security scanning, managed-file sync, and the Marketplace release
+are all driven by the hub-managed `bos-universal-*` kicker workflows in
+`.github/workflows/`. Those files are generated — configure them
+through [bos-universal-config.json](bos-universal-config.json) at the
+repo root instead of editing the workflows.
 
 ### Local development
 
