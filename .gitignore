@@ -21,33 +21,28 @@ htmlcov/
 tracker-*.json
 /tmp-*
 
-# >>> bos-automation-hub:common >>>
-# Managed by https://github.com/blackoutsecure/bos-automation-hub — do not edit between markers.
-# OS noise
+
+# >>> managed-file-sync:common >>>
+# Managed by Blackout Secure Managed File Sync — configure services in .github/bos-universal-config.json.
+# OS + editor noise
 .DS_Store
 Thumbs.db
-._*
-
-# Editor / IDE noise
-.vscode/
-.idea/
 *.swp
-*.swo
-*~
+.idea/
+.vscode/*
+!.vscode/extensions.json
 
-# Local env files (NEVER commit credentials)
+# Build + dependency output
+node_modules/
+dist/
+build/
+coverage/
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local secrets (never commit these)
 .env
 .env.*
 !.env.example
-.envrc
-.direnv/
-
-# TLS / private keys
-.secrets/
-*.pem
-*.key
-*.crt
-*.p12
-*.pfx
-secrets.*
-# <<< bos-automation-hub:common <<<
+# <<< managed-file-sync:common <<<
