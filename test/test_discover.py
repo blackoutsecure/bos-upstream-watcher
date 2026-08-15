@@ -446,6 +446,14 @@ class TestActionYaml:
         # `''` now inherits the configured tracker path, so the smoke test has
         # to disable the tracker explicitly.
         assert config["action_test"]["smoke_test_config"]["tracker_path"] == "none"
+        # The hub installs `action_test.python_packages`, not a requirements
+        # file, so the two lists must not drift apart.
+        requirements = [
+            line.strip()
+            for line in (root / "requirements-dev.txt").read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        assert config["action_test"]["python_packages"] == requirements
 
     def test_managed_file_sync_uses_known_service_names(self):
         """Every selected service must exist in the published sync catalog.

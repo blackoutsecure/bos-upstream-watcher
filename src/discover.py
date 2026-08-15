@@ -763,6 +763,7 @@ ENV_KEYS = (
     "STRIP_V_PREFIX",
     "TRACKER_PATH",
     "INCLUDE_PRERELEASES",
+    "USER_AGENT_OVERRIDE",
 )
 
 # Config-cascade and reporting controls read straight from the composite
@@ -1092,6 +1093,10 @@ def main() -> int:
     try:
         config = watcher_config.resolve(inputs)
         env = dict(config.env)
+        # `_user_agent()` reads the process environment, so publish the
+        # resolved value before any provider issues a request.
+        if env.get("USER_AGENT_OVERRIDE"):
+            os.environ["USER_AGENT_OVERRIDE"] = env["USER_AGENT_OVERRIDE"]
         outputs = run(env)
         outputs["metadata"] = json.dumps(
             watcher_metadata.package_metadata(__version__), separators=(",", ":")

@@ -227,7 +227,9 @@ Four tiers merge, in precedence order:
 2. **Organization/global config** (optional, external) —
    `.github/blackout-secure-upstream-watcher-global-config.json` by default;
    `use_global_config: auto | true | false`, `global_config_path`,
-   `global_config_json`.
+   `global_config_json`. Blackout Secure repos get this tier from
+   [bos-automation-hub](https://github.com/blackoutsecure/bos-automation-hub)
+   at `sync-files/config/upstream-watcher-global-config.json`.
 3. **Repository config** — auto-discovered from
    `.github/bos-universal-config.json` (preferred), `bos-universal-config.json`,
    `upstream-watcher.json`, or `.upstream-watcher.json`; override with
@@ -302,8 +304,8 @@ report.
 | `include_prereleases` | `false` | When `true`, `github_release` lists `repos/{repo}/releases` instead of `releases/latest` and picks the highest SemVer (including `-rc`/`-beta`). Required for upstreams that ship only pre-releases (e.g. `actions/runner`). Ignored for other providers. |
 | `strip_v_prefix` | `true` | Strip a leading `v` from the resolved version. |
 | `tracker_path` | `.github/upstream/tracked-release.json` | Where the tracker JSON is written. Pass `none` to disable the file. |
-| `github_token` | `${{ github.token }}` | Token for authenticated GitHub REST calls. |
-| `user_agent` | `bos-upstream-watcher/<version>` | Override the outbound `User-Agent` header. |
+| `github_token` | `${{ github.token }}` | Token for authenticated GitHub REST calls. Input only — never read from config. |
+| `user_agent` | `bos-upstream-watcher/<version>` | Override the outbound `User-Agent` header. Also settable as `upstream_watcher.user_agent`. |
 
 > **v1.2 behavior change:** an empty `tracker_path` now means "inherit the
 > configured value" instead of "disable the tracker". Use

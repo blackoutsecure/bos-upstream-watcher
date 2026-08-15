@@ -53,6 +53,7 @@ FIELD_TO_ENV = {
     "strip_v_prefix": "STRIP_V_PREFIX",
     "tracker_path": "TRACKER_PATH",
     "include_prereleases": "INCLUDE_PRERELEASES",
+    "user_agent": "USER_AGENT_OVERRIDE",
 }
 BOOL_FIELDS = frozenset({"strip_v_prefix", "include_prereleases"})
 # Explicit "no tracker file" tokens. An empty value means "inherit from the

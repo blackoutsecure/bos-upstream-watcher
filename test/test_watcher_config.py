@@ -47,6 +47,25 @@ class TestBundledDefaults:
         assert resolved.reporting.enable_job_summary is True
         assert resolved.reporting.fail_on == "fail"
 
+    def test_user_agent_is_config_drivable(self, tmp_path):
+        """The hub ships `user_agent` in its global policy for this action."""
+        _write(
+            tmp_path / ".github/blackout-secure-upstream-watcher-global-config.json",
+            {"upstream_watcher": {"user_agent": "blackoutsecure-bos-upstream-watcher"}},
+        )
+        resolved = watcher_config.resolve(_inputs(SOURCE="npm", PACKAGE_NAME="x"), root=tmp_path)
+        assert resolved.env["USER_AGENT_OVERRIDE"] == "blackoutsecure-bos-upstream-watcher"
+
+    def test_user_agent_input_wins(self, tmp_path):
+        _write(
+            tmp_path / "upstream-watcher.json",
+            {"source": "npm", "package_name": "x", "user_agent": "from-config"},
+        )
+        resolved = watcher_config.resolve(
+            _inputs(USER_AGENT_OVERRIDE="from-input"), root=tmp_path
+        )
+        assert resolved.env["USER_AGENT_OVERRIDE"] == "from-input"
+
 
 class TestRepoConfig:
     def test_universal_config_section_is_used(self, tmp_path):

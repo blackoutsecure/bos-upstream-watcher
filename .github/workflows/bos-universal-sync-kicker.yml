@@ -33,6 +33,12 @@ permissions:
 jobs:
   parse_config:
     name: Resolve target hub ref
+    # Local deviation from the hub template (remove once the hub adds it):
+    # the resolver ran on every new branch push, resolved to the hub `main`
+    # ref, and failed because `resolve-hub-ref` only exists on hub `dev`.
+    if: >-
+      github.event_name != 'push'
+      || github.ref_name == github.event.repository.default_branch
     runs-on: ${{ fromJSON(startsWith(vars.DEFAULT_RUNNER || 'ubuntu-latest', '[') && (vars.DEFAULT_RUNNER || 'ubuntu-latest') || format('"{0}"', vars.DEFAULT_RUNNER || 'ubuntu-latest')) }}
     timeout-minutes: 2
     outputs:
