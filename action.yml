@@ -26,7 +26,9 @@ inputs:
         npm                  — registry.npmjs.org/{pkg}/latest
         pypi                 — pypi.org/pypi/{pkg}/json
         generic_url          — fetch URL, apply version_regex
-    required: true
+      Optional when `upstream_watcher.source` is set in the repo config.
+    required: false
+    default: ''
   upstream_repo:
     description: >-
       `owner/name` of the upstream GitHub repo. Required for
@@ -44,9 +46,10 @@ inputs:
       Repo-relative path inside `upstream_branch` whose raw contents are
       the version string. Used only for `github_branch_file`. Pair with
       `version_regex` to extract the version from a structured file (for
-      example a Debian `debian/changelog`).
+      example a Debian `debian/changelog`). Defaults to `version` through
+      the bundled Marketplace config.
     required: false
-    default: 'version'
+    default: ''
   image_ref:
     description: >-
       Container image reference. Used only for `container_image`.
@@ -91,21 +94,86 @@ inputs:
       `repos/{repo}/releases` (which includes pre-releases) instead of
       `releases/latest`, filters by `tag_pattern`, and picks the highest
       SemVer. Required for upstreams that ship only pre-releases (e.g.
-      `actions/runner`, betas, nightlies). Default `'false'` preserves the
-      v1.0 behavior. Ignored for all other providers.
+      `actions/runner`, betas, nightlies). Defaults to `'false'` through
+      the bundled Marketplace config. Ignored for all other providers.
     required: false
-    default: 'false'
+    default: ''
   strip_v_prefix:
-    description: 'Strip a leading `v` from the resolved version.'
+    description: >-
+      Strip a leading `v` from the resolved version. Defaults to `'true'`
+      through the bundled Marketplace config.
     required: false
-    default: 'true'
+    default: ''
   tracker_path:
     description: >-
       Repo-relative path to the tracker JSON file. Created on first run;
-      rewritten when the upstream version changes. Empty disables the
-      file (the action then always reports `changed=true`).
+      rewritten when the upstream version changes. Empty inherits the
+      configured value (`.github/tracked-release.json` by
+      default); pass `none` to disable the file, in which case the action
+      always reports `changed=true`.
     required: false
-    default: '.github/upstream/tracked-release.json'
+    default: ''
+  config_path:
+    description: >-
+      Path to the repo config file. Empty auto-discovers
+      `.github/bos-universal-config.json` (preferred),
+      `bos-universal-config.json`, `upstream-watcher.json`, or
+      `.upstream-watcher.json`. Watcher settings live under an
+      `upstream_watcher` section.
+    required: false
+    default: ''
+  config_json:
+    description: >-
+      Inline JSON object merged after the repo config. Useful for one-off
+      runs without editing a config file.
+    required: false
+    default: ''
+  use_global_config:
+    description: >-
+      `auto` loads the organization/hub global config when present;
+      `true` requires it; `false` disables the tier.
+    required: false
+    default: 'auto'
+  global_config_path:
+    description: >-
+      Organization/hub config path, merged before the repo config.
+    required: false
+    default: '.github/blackout-secure-upstream-watcher-global-config.json'
+  global_config_json:
+    description: >-
+      Inline JSON object merged into the global tier before the repo
+      config is applied.
+    required: false
+    default: ''
+  use_marketplace_config:
+    description: >-
+      `true` (default) applies the bundled marketplace defaults first,
+      then layers global/repo/inline config and inputs on top. Set
+      `false` to skip the bundled tier entirely and start from an empty
+      baseline.
+    required: false
+    default: 'true'
+  enable_ai:
+    description: >-
+      Kill switch for every AI feature. Empty defers to
+      `upstream_watcher.ai` in the config, which enables the advisory
+      release digest and error remediation by default. AI never changes
+      an output value, a finding, or the exit code.
+    required: false
+    default: ''
+  ai_provider:
+    description: >-
+      AI provider override: `auto` (GitHub Models when a token is
+      available), `none` to disable, or a named provider configured via
+      `<NAME>_API_KEY` / `<NAME>_API_ENDPOINT` env vars.
+    required: false
+    default: ''
+  enable_job_summary:
+    description: >-
+      Empty defers to `organization.reporting.enable_job_summary`.
+      `false` suppresses the run report in `$GITHUB_STEP_SUMMARY`.
+    required: false
+    default: ''
   github_token:
     description: >-
       Token used for authenticated GitHub REST calls. Falls back to
@@ -169,6 +237,39 @@ outputs:
       ISO 8601 publication timestamp of the GitHub Release (e.g.
       `2024-09-12T18:23:00Z`). Populated for `source: github_release` only.
     value: ${{ steps.discover.outputs.published_at }}
+  previous_version:
+    description: >-
+      Version recorded in the tracker file before this run. Empty on the
+      first run or when the tracker is disabled.
+    value: ${{ steps.discover.outputs.previous_version }}
+  update_type:
+    description: >-
+      SemVer distance between `previous_version` and `version`: `major`,
+      `minor`, `patch`, `prerelease`, `none`, or `unknown`.
+    value: ${{ steps.discover.outputs.update_type }}
+  ai_summary:
+    description: >-
+      Advisory digest of the upstream release. AI-generated when a
+      provider is available, otherwise a deterministic one-line summary.
+      Multi-line value (emitted via heredoc).
+    value: ${{ steps.discover.outputs.ai_summary }}
+  ai_impact:
+    description: >-
+      Advisory upgrade impact: `low`, `medium`, `high`, or `unknown`.
+      Falls back to a SemVer + breaking-change-keyword heuristic when no
+      AI provider is available. Advisory only — never gates the run.
+    value: ${{ steps.discover.outputs.ai_impact }}
+  ai_status:
+    description: >-
+      Why AI was or was not used on this run (used, disabled, skipped, or
+      unavailable).
+    value: ${{ steps.discover.outputs.ai_status }}
+  metadata:
+    description: >-
+      Compact JSON identity of the action that produced these outputs
+      (name, version, license, repository, support links). Owned by the
+      action; config can never override it.
+    value: ${{ steps.discover.outputs.metadata }}
 
 runs:
   using: composite
@@ -188,30 +289,41 @@ runs:
         STRIP_V_PREFIX: ${{ inputs.strip_v_prefix }}
         TRACKER_PATH: ${{ inputs.tracker_path }}
         INCLUDE_PRERELEASES: ${{ inputs.include_prereleases }}
+        CONFIG_PATH: ${{ inputs.config_path }}
+        CONFIG_JSON: ${{ inputs.config_json }}
+        USE_GLOBAL_CONFIG: ${{ inputs.use_global_config }}
+        GLOBAL_CONFIG_PATH: ${{ inputs.global_config_path }}
+        GLOBAL_CONFIG_JSON: ${{ inputs.global_config_json }}
+        USE_MARKETPLACE_CONFIG: ${{ inputs.use_marketplace_config }}
+        ENABLE_AI: ${{ inputs.enable_ai }}
+        AI_PROVIDER: ${{ inputs.ai_provider }}
+        ENABLE_JOB_SUMMARY: ${{ inputs.enable_job_summary }}
         GH_TOKEN: ${{ inputs.github_token }}
         USER_AGENT_OVERRIDE: ${{ inputs.user_agent }}
       run: |
         set -euo pipefail
 
+        # Values may also come from the config cascade, so only reject
+        # explicitly supplied inputs here; the resolver validates the
+        # merged result and renders a report for anything it rejects.
         case "${SOURCE}" in
-          github_release|github_branch_file|github_tags|container_image|npm|pypi|generic_url) ;;
+          ''|github_release|github_branch_file|github_tags|container_image|npm|pypi|generic_url) ;;
           *) echo "ERROR: input 'source' is not a recognized provider (got '${SOURCE}')" >&2; exit 1 ;;
         esac
 
         case "${STRIP_V_PREFIX}" in
-          true|false) ;;
+          ''|true|false) ;;
           *) echo "ERROR: input 'strip_v_prefix' must be 'true' or 'false' (got '${STRIP_V_PREFIX}')" >&2; exit 1 ;;
         esac
 
         case "${INCLUDE_PRERELEASES}" in
-          true|false) ;;
+          ''|true|false) ;;
           *) echo "ERROR: input 'include_prereleases' must be 'true' or 'false' (got '${INCLUDE_PRERELEASES}')" >&2; exit 1 ;;
         esac
 
-        if [ -n "${TRACKER_PATH}" ]; then
-          case "${TRACKER_PATH}" in
-            /*|*..*) echo "ERROR: input 'tracker_path' must be a repo-relative path: '${TRACKER_PATH}'" >&2; exit 1 ;;
-          esac
-        fi
+        case "${TRACKER_PATH}" in
+          ''|none|off|false|disabled) ;;
+          /*|*..*) echo "ERROR: input 'tracker_path' must be a repo-relative path: '${TRACKER_PATH}'" >&2; exit 1 ;;
+        esac
 
         python3 "${GITHUB_ACTION_PATH}/src/discover.py"

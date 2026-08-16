@@ -27,6 +27,18 @@ package re-publishes, and downstream release pipelines.
 - **SemVer-aware ranking**: pre-release identifiers (`-rc1`, `-beta.2`)
   sort below their base release per the SemVer spec; non-SemVer tags
   are filtered out by a configurable regex.
+- **Layered JSON config**: bundled Marketplace defaults, an optional
+  organization-wide global config, per-repo
+  `.github/bos-universal-config.json`, inline JSON, and action inputs —
+  merged in that precedence order, so a step can carry no `with:` block
+  at all.
+- **Audit-style run report**: executive summary, effective configuration,
+  and a stable per-rule findings table in `$GITHUB_STEP_SUMMARY`, plus
+  workflow annotations.
+- **Optional AI, on by default**: advisory release digest and upgrade-impact
+  rating via GitHub Models, with deterministic heuristics whenever a
+  provider is unavailable or disabled. AI never changes an output, a
+  finding, or the exit code.
 - **GitHub API retry + clear errors**: 3-attempt linear backoff on 5xx
   / connection errors, with hints for SAML SSO and PAT scope failures.
 - **Safe outputs**: resolved values are validated for newlines before
@@ -207,11 +219,77 @@ project websites and unstructured endpoints.
 
 ## ⚙️ Configuration
 
+Every setting can come from an action input **or** from JSON configuration.
+Four tiers merge, in precedence order:
+
+1. **Bundled Marketplace defaults** — `src/upstream-watcher-marketplace-config.json`,
+   shipped with the action. Set `use_marketplace_config: false` to skip this
+   tier entirely and start from an empty baseline.
+2. **Organization/global config** (optional, external) —
+   `.github/blackout-secure-upstream-watcher-global-config.json` by default;
+   `use_global_config: auto | true | false`, `global_config_path`,
+   `global_config_json`. Blackout Secure repos get this tier from
+   [bos-automation-hub](https://github.com/blackoutsecure/bos-automation-hub)
+   at `sync-files/config/upstream-watcher-global-config.json`.
+3. **Repository config** — auto-discovered from
+   `.github/bos-universal-config.json` (preferred), `bos-universal-config.json`,
+   `upstream-watcher.json`, or `.upstream-watcher.json`; override with
+   `config_path` / `config_json`.
+4. **Action inputs** — always win when they are non-empty.
+
+Watcher policy lives under an `upstream_watcher` section, so one universal
+config document can carry security, Marketplace, managed-file sync, and
+watcher policy side by side:
+
+The marketplace config owns the default tracker path,
+`.github/tracked-release.json`. An organization/global config can override
+that default for shared policy, and an individual repository config can
+override it again when it needs a distinct tracker location. The highest
+precedence non-empty setting wins; action inputs override all config tiers.
+
+```jsonc
+{
+  "organization": {
+    "reporting": {
+      "enable_job_summary": true,
+      "enable_annotations": true,
+      "title_prefix": "Blackout Secure",
+      "fail_on": "fail"          // fail | warn | never
+    }
+  },
+  "upstream_watcher": {
+    "source": "github_release",
+    "upstream_repo": "nginx/nginx",
+    "tracker_path": ".github/nginx-tracked-release.json",
+    "ai": {
+      "enable_ai_release_summary": true,
+      "enable_ai_error_remediation": true,
+      "ai_release_summary_provider": "auto",
+      "local_heuristic_fallback": true,
+      "timeout_seconds": 20
+    }
+  }
+}
+```
+
+With that file committed, the workflow step needs no `with:` block at all:
+
+```yaml
+- id: discover
+  uses: blackoutsecure/bos-upstream-watcher@v1
+```
+
+A standalone `upstream-watcher.json` may omit the section wrapper and list
+the settings at the top level. Package identity keys (`name`, `version`,
+`license`, `author`, …) are reserved: config can never rebrand or misreport
+the action that is actually running, and ignored keys are listed in the run
+report.
+
 ### Required inputs
 
 | Input | Description |
 |-------|-------------|
-| `source` | Provider name (see [Provider examples](#-provider-examples)). |
+| `source` | Provider name (see [Provider examples](#-provider-examples)). Optional when `upstream_watcher.source` is set in config. |
 
 ### Provider-specific inputs
 
@@ -230,11 +308,59 @@ project websites and unstructured endpoints.
 | Input | Default | Description |
 |-------|---------|-------------|
 | `tag_pattern` | `^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$` | Filter applied to candidate tags before SemVer ranking. Used by `github_tags`, `container_image`, and `github_release` when `include_prereleases: true`. |
-| `include_prereleases` | `'false'` | When `'true'`, `github_release` lists `repos/{repo}/releases` instead of `releases/latest` and picks the highest SemVer (including `-rc`/`-beta`). Required for upstreams that ship only pre-releases (e.g. `actions/runner`). Ignored for other providers. |
+| `include_prereleases` | `false` | When `true`, `github_release` lists `repos/{repo}/releases` instead of `releases/latest` and picks the highest SemVer (including `-rc`/`-beta`). Required for upstreams that ship only pre-releases (e.g. `actions/runner`). Ignored for other providers. |
 | `strip_v_prefix` | `true` | Strip a leading `v` from the resolved version. |
-| `tracker_path` | `.github/upstream/tracked-release.json` | Where the tracker JSON is written. Empty disables the file. |
-| `github_token` | `${{ github.token }}` | Token for authenticated GitHub REST calls. |
-| `user_agent` | `bos-upstream-watcher/<version>` | Override the outbound `User-Agent` header. |
+| `tracker_path` | `.github/tracked-release.json` | Where the tracker JSON is written. The marketplace default can be overridden by the organization/global config or a repository config. Pass `none` to disable the file. |
+| `github_token` | `${{ github.token }}` | Token for authenticated GitHub REST calls. Input only — never read from config. |
+| `user_agent` | `bos-upstream-watcher/<version>` | Override the outbound `User-Agent` header. Also settable as `upstream_watcher.user_agent`. |
+
+> **v1.2 behavior change:** an empty `tracker_path` now means "inherit the
+> configured value" instead of "disable the tracker". Use
+> `tracker_path: none` (or `off` / `false` / `disabled`) to run without a
+> tracker file.
+
+### Configuration and reporting inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `config_path` | auto-discovery | Explicit repo config file path. |
+| `config_json` | `''` | Inline JSON merged after the repo config. |
+| `use_global_config` | `auto` | `auto` loads the global tier when present, `true` requires it, `false` disables it. |
+| `global_config_path` | `.github/blackout-secure-upstream-watcher-global-config.json` | Organization/hub config path. |
+| `global_config_json` | `''` | Inline JSON merged into the global tier. |
+| `use_marketplace_config` | `true` | Set `false` to skip the bundled marketplace defaults entirely and start from an empty baseline (global/repo/inline config and inputs still apply). |
+| `enable_ai` | config (`true`) | Kill switch for every AI feature. |
+| `ai_provider` | config (`auto`) | `auto`, `none`, or a named provider. |
+| `enable_job_summary` | config (`true`) | Suppress the run report with `false`. |
+
+## 🤖 AI assistance
+
+AI is **enabled by default and never required**. It is advisory only: it
+cannot change an output value, a finding, a severity, or the exit code, and
+every feature falls back to deterministic local logic.
+
+| Feature | What it does | Fallback when unavailable |
+|---------|--------------|---------------------------|
+| Release digest | Summarizes what changed upstream and rates upgrade impact (`ai_summary`, `ai_impact`) | One-line version delta plus a SemVer + breaking-change-keyword heuristic |
+| Error remediation | Adds advisory guidance to the failure report | Deterministic per-rule remediation, always present |
+
+* **Provider** — `auto` uses [GitHub Models](https://models.github.ai) with
+  the workflow token; no extra secret is needed. Any other provider needs
+  `<NAME>_API_KEY` and an HTTPS `<NAME>_API_ENDPOINT`. Plain-HTTP endpoints
+  are refused.
+* **What is sent** — only allowlisted release metadata (label, source,
+  versions, update type, release name, and release notes truncated to 4000
+  characters) or error metadata (category, error text, location,
+  deterministic remediation). Credentials, config documents, and tracker
+  contents are never sent.
+* **Turning it off** — `enable_ai: 'false'` on the step, `ai_provider:
+  'none'`, or `upstream_watcher.ai.enable_ai_release_summary: false` in
+  config. A run with no provider credential behaves exactly like a run with
+  AI disabled, except the status line says so.
+* **Prompt-injection posture** — upstream release notes are untrusted input.
+  The system prompt states this explicitly, responses must be JSON with a
+  constrained `impact` enum, and anything that fails validation is discarded
+  in favour of the deterministic result.
 
 ## 📤 Outputs
 
@@ -245,21 +371,50 @@ project websites and unstructured endpoints.
 | `tag` | Raw upstream tag name (preserves any leading `v`). |
 | `commit` | Upstream commit SHA. Empty for `npm`, `pypi`, `container_image`, and `generic_url`. |
 | `source_url` | URL that was consulted, for traceability. |
-| `tracker_path` | Repo-relative path of the tracker file (echoes the input). |
+| `tracker_path` | Repo-relative path of the tracker file (echoes the resolved value). |
 | `label` | Canonical identifier for the upstream — `owner/name` for GitHub sources, package name for `npm`/`pypi`, `<registry>/<ns>/<image>` for `container_image`, or the URL for `generic_url`. Use this in commit messages and Slack notifications instead of a fallback chain across inputs. |
+| `previous_version` | Version recorded in the tracker before this run. Empty on the first run or when the tracker is disabled. |
+| `update_type` | `major`, `minor`, `patch`, `prerelease`, `none`, or `unknown`. |
+| `ai_summary` | Advisory release digest (multi-line; AI-generated or heuristic). |
+| `ai_impact` | Advisory upgrade impact: `low`, `medium`, `high`, or `unknown`. |
+| `ai_status` | Whether AI was used, disabled, skipped, or unavailable. |
+| `metadata` | Compact JSON identity of the action that produced these outputs. |
 | `release_url` | `github_release` only. HTML URL of the GitHub Release. |
 | `release_name` | `github_release` only. Release display name (may differ from the tag). |
 | `release_body` | `github_release` only. Markdown release notes (multi-line; emitted via heredoc). |
 | `published_at` | `github_release` only. ISO 8601 publication timestamp. |
 
-The action also writes a compact summary to `$GITHUB_STEP_SUMMARY` when
-that variable is set (it always is on GitHub-hosted runners) so the
-resolved values show up directly on the workflow run page — no extra
-`run:` step needed in the caller.
+## 📋 Run report
+
+Every run appends an audit-style report to `$GITHUB_STEP_SUMMARY` —
+executive summary, the effective configuration and config cascade,
+recommended actions, the AI section, and a per-rule findings table. Failures
+render the same layout, so a broken run is as legible as a healthy one.
+Findings are also emitted as workflow annotations.
+
+| Rule | Meaning |
+|------|---------|
+| `UW-RES-001` | Upstream version resolution. |
+| `UW-CHG-001` | Change detection (warns on a major upgrade). |
+| `UW-TRK-001` | Tracker file state (`Not Assessed` when the tracker is disabled). |
+| `UW-CFG-000` | Configuration cascade actually applied. |
+| `UW-CFG-001`…`UW-CFG-004` | Invalid JSON, missing config file, invalid settings, unsupported reference. |
+| `UW-AUTH-001` | Upstream authentication or rate-limit failure. |
+| `UW-NET-001` | Upstream request failure. |
+| `UW-MATCH-001` | No version matched `tag_pattern` / `version_regex`. |
+| `UW-FS-001` | Tracker file I/O error. |
+| `UW-RUN-000` | Unclassified runtime error. |
+
+`organization.reporting.fail_on` decides which severities end the run:
+`fail` (default) fails only on `High` findings, `warn` also fails on
+advisories, and `never` never fails on findings alone. Set
+`enable_job_summary: 'false'` to suppress the summary, or
+`organization.reporting.enable_annotations: false` to suppress annotations.
 
 ## 🗂️ Tracker file
 
-When `tracker_path` is set (the default), the action writes a JSON file
+When `tracker_path` is set (the marketplace default is
+`.github/tracked-release.json`), the action writes a JSON file
 whose shape depends on the provider. Example for `github_release`:
 
 ```json
@@ -276,7 +431,7 @@ copy on the next run; if the contents are byte-identical, `changed` is
 `false` and the file is not rewritten. This keeps your git history free
 of no-op commits.
 
-Set `tracker_path: ''` to disable the file entirely — useful when the
+Set `tracker_path: none` to disable the file entirely — useful when the
 caller does its own dispatch and does not need a persistent marker.
 In that mode the action always reports `changed=true`.
 
@@ -316,7 +471,7 @@ Tags are sorted with strict SemVer ordering:
 The script logs to stdout for every run:
 
 ```text
-First run for github_release 1.27.2 — wrote .github/upstream/tracked-release.json
+First run for github_release 1.27.2 — wrote .github/tracked-release.json
 ```
 
 When `changed=true` and a previous tracker file existed, a unified diff
@@ -324,8 +479,8 @@ is printed:
 
 ```text
 Change detected (github_release):
---- .github/upstream/tracked-release.json
-+++ .github/upstream/tracked-release.json.new
+--- .github/tracked-release.json
++++ .github/tracked-release.json.new
 @@ -1,5 +1,5 @@
  {
    "repo": "nginx/nginx",
@@ -429,10 +584,16 @@ which applies to every repo in the org. The repo-specific bits are
 below.
 
 All PRs target the **`dev`** branch. The `main` branch is built by
-the Marketplace release pipeline (the launchpad reusable in
+the Marketplace release pipeline (the universal Marketplace reusable in
 [bos-automation-hub](https://github.com/blackoutsecure/bos-automation-hub))
 and is read-only to humans — PRs opened against `main` will be
 closed.
+
+CI, security scanning, managed-file sync, and the Marketplace release
+are all driven by the hub-managed `bos-universal-*` kicker workflows in
+`.github/workflows/`. Those files are generated — configure them
+through [.github/bos-universal-config.json](.github/bos-universal-config.json) at the
+repo root instead of editing the workflows.
 
 ### Local development
 

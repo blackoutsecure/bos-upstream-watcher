@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Discover the latest version of an upstream project from one of several
-sources. Reads inputs from env vars (set by the parent composite action),
-writes a byte-stable tracker JSON file, diffs against the previous tracker,
-and emits GitHub Actions outputs.
+sources. Reads inputs from env vars (set by the parent composite action) on
+top of a layered JSON configuration, writes a byte-stable tracker JSON file,
+diffs against the previous tracker, and emits GitHub Actions outputs plus an
+audit-style run report.
 
 Stdlib-only: urllib + json + re + difflib. No third-party dependencies.
 """
@@ -20,7 +21,12 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any, NamedTuple
 
-__version__ = "1.1.0"
+import watcher_ai
+import watcher_config
+import watcher_metadata
+import watcher_reporting
+
+__version__ = "1.2.0"
 
 # Default tag/version filter (SemVer with optional `v` prefix and pre-release
 # / build metadata). Used by github_tags and container_image when the caller
@@ -37,9 +43,20 @@ def _user_agent() -> str:
 # ---------------------------------------------------------------------------
 
 
+class WatcherExit(SystemExit):
+    """Fatal error that still carries its message to the report renderer."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(1)
+        self.message = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
 def die(msg: str) -> None:
     sys.stderr.write(f"ERROR: {msg}\n")
-    sys.exit(1)
+    raise WatcherExit(msg)
 
 
 def http_request(
@@ -66,9 +83,7 @@ def http_request(
         except urllib.error.HTTPError as exc:
             if exc.code < 500:
                 # 4xx is terminal — retrying won't help.
-                err_headers = (
-                    {k.lower(): v for k, v in exc.headers.items()} if exc.headers else {}
-                )
+                err_headers = {k.lower(): v for k, v in exc.headers.items()} if exc.headers else {}
                 return exc.code, exc.read() or b"", err_headers
             last_err = exc
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
@@ -445,9 +460,7 @@ def _split_two_segments(path: str, registry: str, image_ref: str) -> tuple[str, 
 
 def _list_dockerhub_tags(ns: str, name: str) -> list[str]:
     all_tags: list[str] = []
-    next_url: str | None = (
-        f"https://hub.docker.com/v2/repositories/{ns}/{name}/tags/?page_size=100"
-    )
+    next_url: str | None = f"https://hub.docker.com/v2/repositories/{ns}/{name}/tags/?page_size=100"
     pages = 0
     while next_url and pages < 5:
         status, body, _ = http_request(next_url, accept_json=True)
@@ -469,10 +482,7 @@ def _list_ghcr_tags(owner: str, image: str) -> list[str]:
     # requested repo. For PRIVATE repos it returns 200 with an unscoped
     # token that fails on /v2 (giving us a 401 to diagnose), so the token
     # call itself doesn't need a special-case.
-    token_url = (
-        f"https://ghcr.io/token?service=ghcr.io"
-        f"&scope=repository:{owner}/{image}:pull"
-    )
+    token_url = f"https://ghcr.io/token?service=ghcr.io&scope=repository:{owner}/{image}:pull"
     status, body, _ = http_request(token_url, accept_json=True)
     if status >= 400:
         die(f"GHCR token endpoint returned {status} for {owner}/{image}")
@@ -561,7 +571,9 @@ _REGISTRIES: dict[str, _RegistryConfig] = {
         normalize_path=lambda p: p,
         list_tags=_list_ghcr_tags,
         # GitHub's container package URL uses the IMAGE name, not the owner.
-        source_url=lambda owner, image: f"https://github.com/{owner}/{image}/pkgs/container/{image}",
+        source_url=lambda owner, image: (
+            f"https://github.com/{owner}/{image}/pkgs/container/{image}"
+        ),
     ),
     "quay.io": _RegistryConfig(
         normalize_path=lambda p: p,
@@ -746,14 +758,27 @@ ENV_KEYS = (
     "STRIP_V_PREFIX",
     "TRACKER_PATH",
     "INCLUDE_PRERELEASES",
+    "USER_AGENT_OVERRIDE",
+)
+
+# Config-cascade and reporting controls read straight from the composite
+# action's `env:` block. They never reach a provider.
+CONTROL_ENV_KEYS = (
+    "USE_GLOBAL_CONFIG",
+    "GLOBAL_CONFIG_PATH",
+    "GLOBAL_CONFIG_JSON",
+    "CONFIG_PATH",
+    "CONFIG_JSON",
+    "ENABLE_AI",
+    "AI_PROVIDER",
+    "ENABLE_JOB_SUMMARY",
 )
 
 
-# Outputs whose value MAY legitimately contain newlines (currently just
-# release_body — release notes are unstructured prose). All other outputs
-# stay single-line and use the standard `key=value` format. `write_outputs`
-# enforces this distinction.
-_MULTILINE_OUTPUTS = frozenset({"release_body"})
+# Outputs whose value MAY legitimately contain newlines (release notes and the
+# AI digest are unstructured prose). All other outputs stay single-line and use
+# the standard `key=value` format. `write_outputs` enforces this distinction.
+_MULTILINE_OUTPUTS = frozenset({"release_body", "ai_summary"})
 
 # Output keys whose values come from the provider's result dict. Drives the
 # outputs dict in `run()` so adding a new field = one entry here + one entry
@@ -771,60 +796,35 @@ _OUTPUT_KEYS_FROM_RESULT = (
 )
 
 
-def _write_step_summary(env: dict[str, str], outputs: dict[str, str]) -> None:
-    """Append a one-block summary to `$GITHUB_STEP_SUMMARY` (if set).
-
-    Render is intentionally compact — callers that need richer detail can
-    append their own block afterwards. The summary is best-effort: any IO
-    failure is swallowed silently so the action's primary contract
-    (writing GITHUB_OUTPUT) is not affected.
-    """
-    path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if not path:
-        return
-
-    def cell(v: str) -> str:
-        return f"`{v}`" if v else "_n/a_"
-
-    label = outputs.get("label") or ""
-    commit = outputs.get("commit") or ""
-    commit_short = commit[:12] if commit else ""
-    changed = outputs.get("changed", "")
-    source_url = outputs.get("source_url") or ""
-    src_cell = f"<{source_url}>" if source_url else "_n/a_"
-
-    lines = [
-        "## 🔍 Upstream Watcher",
-        "",
-        "| Field | Value |",
-        "|-------|-------|",
-        f"| Source | {cell(env['SOURCE'])} |",
-        f"| Upstream | {cell(label)} |",
-        f"| Tag | {cell(outputs.get('tag', ''))} |",
-        f"| Version | {cell(outputs.get('version', ''))} |",
-        f"| Commit | {cell(commit_short)} |",
-        f"| Source URL | {src_cell} |",
-        f"| Changed | {cell(changed)} |",
-    ]
-    if outputs.get("published_at"):
-        lines.append(f"| Published | {cell(outputs['published_at'])} |")
-    if outputs.get("release_name"):
-        lines.append(f"| Release | {outputs['release_name']} |")
-
+def _tracker_version(text: str) -> str:
+    """Best-effort read of the version recorded in a previous tracker file."""
     try:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
-    except OSError as exc:
-        # Don't fail the action on a summary write issue.
-        print(f"warning: could not write step summary: {exc}", file=sys.stderr)
+        data = json.loads(text)
+    except (TypeError, ValueError):
+        return ""
+    return str(data.get("version", "")) if isinstance(data, dict) else ""
+
+
+def update_type(previous: str, current: str) -> str:
+    """Classify the SemVer distance between two versions."""
+    if not previous or not current:
+        return "unknown"
+    if previous == current:
+        return "none"
+    old, new = _SEMVER_RE.match(previous), _SEMVER_RE.match(current)
+    if not old or not new:
+        return "unknown"
+    for part in ("major", "minor", "patch"):
+        if int(old.group(part)) != int(new.group(part)):
+            return part
+    return "prerelease"
 
 
 def run(env: dict[str, str]) -> dict[str, str]:
     """Run a provider and return the outputs dict. Side-effect: writes the
-    tracker file when `TRACKER_PATH` is set, and appends a step summary
-    when `GITHUB_STEP_SUMMARY` is set. The returned dict is what `main()`
-    appends to `GITHUB_OUTPUT`; `write_outputs()` is the single source of
-    truth for newline validation.
+    tracker file when `TRACKER_PATH` is set. The returned dict is what
+    `main()` appends to `GITHUB_OUTPUT`; `write_outputs()` is the single
+    source of truth for newline validation.
     """
     source = env["SOURCE"]
     if source not in PROVIDERS:
@@ -838,6 +838,7 @@ def run(env: dict[str, str]) -> dict[str, str]:
     tracker_text = json.dumps(result["tracker"], indent=2) + "\n"
 
     changed = "true"
+    previous_version = ""
     if env["TRACKER_PATH"]:
         path = env["TRACKER_PATH"]
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
@@ -845,6 +846,7 @@ def run(env: dict[str, str]) -> dict[str, str]:
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
                 prev = f.read()
+        previous_version = _tracker_version(prev)
         if prev == tracker_text:
             changed = "false"
             print(f"No change: {source} {result['version']} matches existing tracker.")
@@ -868,22 +870,245 @@ def run(env: dict[str, str]) -> dict[str, str]:
             f"No tracker_path configured; reporting changed=true for {source} {result['version']}"
         )
 
-    outputs = {
+    return {
         "changed": changed,
         **{k: result.get(k, "") for k in _OUTPUT_KEYS_FROM_RESULT},
         "tracker_path": env["TRACKER_PATH"],
+        "previous_version": previous_version,
+        "update_type": update_type(previous_version, str(result.get("version", ""))),
     }
 
-    _write_step_summary(env, outputs)
 
-    return outputs
+# ---------------------------------------------------------------------------
+# Reporting
+# ---------------------------------------------------------------------------
+
+
+def build_report(
+    env: dict[str, str],
+    outputs: dict[str, str],
+    config: watcher_config.ResolvedConfig,
+) -> watcher_reporting.RunReport:
+    """Assess a completed run into deterministic findings."""
+    report = watcher_reporting.RunReport(context=_context(env, outputs, config))
+    label = outputs.get("label") or env.get("SOURCE", "")
+    version = outputs.get("version", "")
+
+    report.add(
+        watcher_reporting.Finding(
+            rule_id="UW-RES-001",
+            category="Upstream version resolution",
+            severity="pass",
+            location=outputs.get("source_url") or label,
+            evidence=f"Resolved {label} to version {version} (tag {outputs.get('tag') or 'n/a'}).",
+            remediation="No action required.",
+        )
+    )
+
+    changed = outputs.get("changed") == "true"
+    delta = outputs.get("update_type", "unknown")
+    previous = outputs.get("previous_version") or "unknown"
+    report.add(
+        watcher_reporting.Finding(
+            rule_id="UW-CHG-001",
+            category="Upstream change detection",
+            severity="warn" if changed and delta == "major" else "pass",
+            location=label,
+            evidence=(
+                f"Upstream changed from {previous} to {version} ({delta} update)."
+                if changed
+                else f"No upstream change; {version} still matches the tracker."
+            ),
+            remediation=(
+                "Review the upstream release notes before promoting a major upgrade downstream."
+                if changed and delta == "major"
+                else "No action required."
+            ),
+        )
+    )
+
+    tracker = env.get("TRACKER_PATH", "")
+    report.add(
+        watcher_reporting.Finding(
+            rule_id="UW-TRK-001",
+            category="Tracker file state",
+            severity="pass" if tracker else "skip",
+            location=tracker or "tracker disabled",
+            evidence=(
+                f"Tracker file {tracker} is up to date."
+                if tracker
+                else "No tracker path configured; every run reports changed=true."
+            ),
+            remediation=(
+                "No action required."
+                if tracker
+                else "Set `tracker_path` to persist upstream state and get real change detection."
+            ),
+        )
+    )
+
+    report.add(
+        watcher_reporting.Finding(
+            rule_id="UW-CFG-000",
+            category="Configuration cascade",
+            severity="pass",
+            location=config.repository_config or "action inputs",
+            evidence=f"Applied tiers: {', '.join(config.sources) or 'action inputs only'}.",
+            remediation="No action required.",
+        )
+    )
+    return report
+
+
+def _context(
+    env: dict[str, str],
+    outputs: dict[str, str],
+    config: watcher_config.ResolvedConfig,
+) -> watcher_reporting.RunContext:
+    return watcher_reporting.RunContext(
+        command="discover",
+        source=env.get("SOURCE", ""),
+        label=outputs.get("label", ""),
+        tracker_path=env.get("TRACKER_PATH", ""),
+        repository_config=config.repository_config,
+        global_config=config.global_config,
+        config_sources=config.sources,
+        ignored_metadata_keys=config.ignored_metadata_keys,
+        package_version=__version__,
+    )
+
+
+def apply_ai_digest(
+    report: watcher_reporting.RunReport,
+    outputs: dict[str, str],
+    config: watcher_config.ResolvedConfig,
+) -> None:
+    """Attach an advisory release digest, falling back to local heuristics."""
+    settings = config.ai
+    heuristic_impact = watcher_ai.heuristic_impact(
+        outputs.get("update_type", "unknown"), outputs.get("release_body", "")
+    )
+    if not settings.enable_ai_release_summary:
+        report.ai.status = "Disabled by configuration"
+    elif outputs.get("changed") != "true":
+        report.ai.status = "Skipped: no upstream change to summarize"
+    else:
+        provider = watcher_ai.detect_provider(settings.ai_release_summary_provider)
+        if provider is None:
+            report.ai.status = "Unavailable: no AI provider credential on this runner"
+        else:
+            digest = watcher_ai.release_digest(
+                {**outputs, "source": report.context.source},
+                provider,
+                timeout=settings.timeout_seconds,
+            )
+            if digest is None:
+                report.ai.status = f"Unavailable: {provider.name} returned no usable response"
+            else:
+                report.ai.status = f"Used ({provider.name})"
+                report.ai.summary = digest.summary
+                report.ai.impact = digest.impact
+                report.ai.source = digest.source
+
+    if not report.ai.summary and settings.local_heuristic_fallback:
+        report.ai.summary = watcher_ai.heuristic_summary(
+            {**outputs, "source": report.context.source}
+        )
+        report.ai.impact = heuristic_impact
+        report.ai.source = "Blackout Secure deterministic heuristics"
+
+    outputs["ai_summary"] = report.ai.summary
+    outputs["ai_impact"] = report.ai.impact or heuristic_impact
+    outputs["ai_status"] = report.ai.status
+
+
+def emit_report(
+    report: watcher_reporting.RunReport,
+    settings: watcher_reporting.ReportingSettings,
+) -> None:
+    """Write the job summary and annotations; never fatal on I/O failure."""
+    for line in watcher_reporting.emit_annotations(report, settings):
+        print(line)
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not settings.enable_job_summary or not summary_path:
+        return
+    text = watcher_reporting.render_summary(report, settings)
+    if not watcher_reporting.append_summary(summary_path, text):
+        print("warning: could not write step summary", file=sys.stderr)
+
+
+def _failure_report(
+    error: Exception,
+    inputs: dict[str, str],
+    config: watcher_config.ResolvedConfig | None,
+) -> None:
+    """Render the failure path with the same audit layout as a healthy run."""
+    settings = config.reporting if config else watcher_reporting.ReportingSettings()
+    finding = watcher_reporting.assess_error(error)
+    context = watcher_reporting.RunContext(
+        command="discover",
+        source=inputs.get("SOURCE", ""),
+        tracker_path=inputs.get("TRACKER_PATH", ""),
+        repository_config=config.repository_config if config else "",
+        global_config=config.global_config if config else "",
+        config_sources=config.sources if config else (),
+        ignored_metadata_keys=config.ignored_metadata_keys if config else (),
+        package_version=__version__,
+    )
+    report = watcher_reporting.RunReport(context=context)
+    report.add(finding)
+    report.verdict = "High — upstream discovery failed"
+
+    ai_settings = config.ai if config else watcher_ai.AISettings()
+    if not ai_settings.enable_ai_error_remediation:
+        report.ai.status = "Disabled by configuration"
+    else:
+        provider = watcher_ai.detect_provider(ai_settings.ai_error_remediation_provider)
+        if provider is None:
+            report.ai.status = "Unavailable: no AI provider credential on this runner"
+        else:
+            advice = watcher_ai.recommend_error(
+                finding.ai_payload(), provider, timeout=ai_settings.timeout_seconds
+            )
+            if advice is None:
+                report.ai.status = f"Unavailable: {provider.name} returned no usable response"
+            else:
+                report.ai.status = f"Used ({provider.name})"
+                report.ai.recommendation = advice.recommendation
+                report.ai.rationale = advice.rationale
+                report.ai.confidence = advice.confidence
+                report.ai.source = f"AI ({provider.name})"
+
+    emit_report(report, settings)
 
 
 def main() -> int:
-    env = {k: os.environ.get(k, "") for k in ENV_KEYS}
-    outputs = run(env)
+    inputs = {k: os.environ.get(k, "") for k in (*ENV_KEYS, *CONTROL_ENV_KEYS)}
+    config: watcher_config.ResolvedConfig | None = None
+    try:
+        config = watcher_config.resolve(inputs)
+        env = dict(config.env)
+        # `_user_agent()` reads the process environment, so publish the
+        # resolved value before any provider issues a request.
+        if env.get("USER_AGENT_OVERRIDE"):
+            os.environ["USER_AGENT_OVERRIDE"] = env["USER_AGENT_OVERRIDE"]
+        outputs = run(env)
+        outputs["metadata"] = json.dumps(
+            watcher_metadata.package_metadata(__version__), separators=(",", ":")
+        )
+        report = build_report(env, outputs, config)
+        apply_ai_digest(report, outputs, config)
+        emit_report(report, config.reporting)
+    except (watcher_config.ConfigError, watcher_ai.AIError, watcher_reporting.ReportError) as exc:
+        sys.stderr.write(f"ERROR: {exc}\n")
+        _failure_report(exc, inputs, config)
+        return 1
+    except WatcherExit as exc:
+        _failure_report(exc, inputs, config)
+        return 1
+
     write_outputs(outputs, multiline_keys=_MULTILINE_OUTPUTS)
-    return 0
+    return 1 if watcher_reporting.should_fail(report, config.reporting) else 0
 
 
 if __name__ == "__main__":

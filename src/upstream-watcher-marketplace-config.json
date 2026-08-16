@@ -1,0 +1,26 @@
+{
+  "upstream_watcher": {
+    "use_marketplace_config": true,
+    "version_file_path": "version",
+    "strip_v_prefix": true,
+    "include_prereleases": false,
+    "tracker_path": ".github/tracked-release.json",
+    "ai": {
+      "enable_ai_release_summary": true,
+      "ai_release_summary_provider": "auto",
+      "enable_ai_error_remediation": true,
+      "ai_error_remediation_provider": "auto",
+      "local_heuristic_fallback": true,
+      "timeout_seconds": 20
+    }
+  },
+  "organization": {
+    "reporting": {
+      "enable_job_summary": true,
+      "enable_annotations": true,
+      "enable_ai_section": true,
+      "title_prefix": "Blackout Secure",
+      "fail_on": "fail"
+    }
+  }
+}
