@@ -18,6 +18,11 @@ run-name: >-
     branches: [main, dev]
   push:
     branches: [main, dev]
+    paths-ignore:
+      - '.github/workflows/bos-universal-action-test-kicker.yml'
+      - '**/bos-scan-*.sarif'
+      - '**/bos-scan-*.json'
+      - '**/blackout-secure-audit-report.*'
   workflow_dispatch:
 
 permissions:

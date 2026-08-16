@@ -28,6 +28,10 @@ run-name: >-
     # across every onboarded repo before this fix).
     paths-ignore:
       - '.github/marketplace-relevance-score.json'
+      - '.github/workflows/bos-universal-marketplace-kicker.yml'
+      - '**/bos-scan-*.sarif'
+      - '**/bos-scan-*.json'
+      - '**/blackout-secure-audit-report.*'
   pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened]

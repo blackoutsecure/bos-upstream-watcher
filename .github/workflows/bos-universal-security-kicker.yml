@@ -22,6 +22,11 @@ run-name: >-
     branches: [main, dev]
   push:
     branches: [main, dev]
+    paths-ignore:
+      - '.github/workflows/bos-universal-security-kicker.yml'
+      - '**/bos-scan-*.sarif'
+      - '**/bos-scan-*.json'
+      - '**/blackout-secure-audit-report.*'
   merge_group:
   workflow_dispatch:
 
