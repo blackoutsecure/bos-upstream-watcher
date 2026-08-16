@@ -55,9 +55,17 @@
       "running_total": 10,
       "sha": "HEAD",
       "source": "local"
+    },
+    {
+      "at": "",
+      "diff_score": 40,
+      "published": false,
+      "running_total": 50,
+      "sha": "HEAD",
+      "source": "local"
     }
   ],
   "last_reset_at": "",
   "last_reset_sha": "",
-  "running_total": 10
+  "running_total": 50
 }
