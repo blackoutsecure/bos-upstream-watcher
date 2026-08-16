@@ -1,4 +1,5 @@
 # >>> managed-file-sync:lf_line_endings >>>
+# Managed by Blackout Secure Managed File Sync — configure services in .github/bos-universal-config.json.
 * text=auto eol=lf
 *.sh text eol=lf
 *.bat text eol=crlf
