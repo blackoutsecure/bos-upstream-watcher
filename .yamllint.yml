@@ -1,5 +1,14 @@
 # Managed by Blackout Secure Managed File Sync — configure services in .github/bos-universal-config.json.
 # Do not edit — every sync run overwrites this file.
+
+
+
+
+
+
+
+
+# >>> managed-file-sync:yamllint >>>
 extends: default
 
 ignore: |
@@ -37,3 +46,4 @@ rules:
 
   # Document-start markers (---) are noisy in workflow files.
   document-start: disable
+# <<< managed-file-sync:yamllint <<<
