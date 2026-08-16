@@ -1,6 +1,6 @@
 {
-  "repo": "stub/repo",
-  "tag": "v1.2.3",
-  "version": "1.2.3",
-  "commit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  "repo": "blackoutsecure/bos-upstream-watcher",
+  "tag": "v1.1.1",
+  "version": "1.1.1",
+  "commit": "44cac53ae99ca777035398a8764449f708986bef"
 }
