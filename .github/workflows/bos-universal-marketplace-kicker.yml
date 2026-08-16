@@ -214,7 +214,7 @@ jobs:
           persist-credentials: true
       - name: Score relevance
         id: gate
-        uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@f16e13708eb38ae3b7c11859b00223766c08750a # dev
+        uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@b0b0c4ee244fadb9e1164bff190f5a401ee87eb6 # dev
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_MODELS_TOKEN || github.token }}
       - name: Checkout hub commit-and-push helper
@@ -340,7 +340,7 @@ jobs:
         with:
           token: ${{ secrets.WORKFLOW_SYNC_PAT || github.token }}
           persist-credentials: true
-      - uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@f16e13708eb38ae3b7c11859b00223766c08750a # dev
+      - uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@b0b0c4ee244fadb9e1164bff190f5a401ee87eb6 # dev
         with:
           reset: 'true'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -381,7 +381,7 @@ jobs:
       models: read
     uses: blackoutsecure/bos-automation-hub/.github/workflows/repo-metadata-sync.yml@main
     with:
-      checkout_ref: ${{ (inputs.operation == 'release' || github.event_name == 'push') && needs.release.outputs.tag_name || (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.target_branch || 'main') }}
+      checkout_ref: ${{ needs.release.result == 'success' && needs.release.outputs.tag_name || (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.target_branch || 'main') }}
       description: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.description || '' }}
       description_mode: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.description_mode || 'auto' }}
       description_fallback: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.description_fallback || '' }}
