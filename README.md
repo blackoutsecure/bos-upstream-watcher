@@ -223,7 +223,8 @@ Every setting can come from an action input **or** from JSON configuration.
 Four tiers merge, in precedence order:
 
 1. **Bundled Marketplace defaults** — `src/upstream-watcher-marketplace-config.json`,
-   shipped with the action.
+   shipped with the action. Set `use_marketplace_config: false` to skip this
+   tier entirely and start from an empty baseline.
 2. **Organization/global config** (optional, external) —
    `.github/blackout-secure-upstream-watcher-global-config.json` by default;
    `use_global_config: auto | true | false`, `global_config_path`,
@@ -327,6 +328,7 @@ report.
 | `use_global_config` | `auto` | `auto` loads the global tier when present, `true` requires it, `false` disables it. |
 | `global_config_path` | `.github/blackout-secure-upstream-watcher-global-config.json` | Organization/hub config path. |
 | `global_config_json` | `''` | Inline JSON merged into the global tier. |
+| `use_marketplace_config` | `true` | Set `false` to skip the bundled marketplace defaults entirely and start from an empty baseline (global/repo/inline config and inputs still apply). |
 | `enable_ai` | config (`true`) | Kill switch for every AI feature. |
 | `ai_provider` | config (`auto`) | `auto`, `none`, or a named provider. |
 | `enable_job_summary` | config (`true`) | Suppress the run report with `false`. |

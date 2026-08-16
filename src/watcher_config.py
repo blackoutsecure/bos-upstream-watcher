@@ -217,8 +217,12 @@ def resolve(inputs: Mapping[str, str], *, root: Path | None = None) -> ResolvedC
     if use_global not in {"auto", "true", "false"}:
         raise ConfigError("input 'use_global_config' must be 'auto', 'true', or 'false'")
 
+    use_marketplace = (inputs.get("USE_MARKETPLACE_CONFIG") or "true").strip().lower()
+    if use_marketplace not in {"true", "false"}:
+        raise ConfigError("input 'use_marketplace_config' must be 'true' or 'false'")
+
     sources: list[str] = []
-    merged: dict[str, Any] = bundled_config(root)
+    merged: dict[str, Any] = bundled_config(root) if use_marketplace == "true" else {}
     ignored: list[str] = []
     if merged:
         sources.append("bundled marketplace defaults")

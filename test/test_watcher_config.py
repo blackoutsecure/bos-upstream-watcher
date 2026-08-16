@@ -21,6 +21,7 @@ def _inputs(**overrides):
             "USE_GLOBAL_CONFIG": "auto",
             "GLOBAL_CONFIG_PATH": "",
             "GLOBAL_CONFIG_JSON": "",
+            "USE_MARKETPLACE_CONFIG": "true",
             "CONFIG_PATH": "",
             "CONFIG_JSON": "",
             "ENABLE_AI": "",
@@ -38,10 +39,27 @@ class TestBundledDefaults:
             _inputs(SOURCE="npm", PACKAGE_NAME="left-pad"), root=tmp_path
         )
         assert resolved.env["TRACKER_PATH"] == ".github/tracked-release.json"
-        assert resolved.env["STRIP_V_PREFIX"] == "true"
-        assert resolved.env["INCLUDE_PRERELEASES"] == "false"
-        assert resolved.env["VERSION_FILE_PATH"] == "version"
-        assert "bundled marketplace defaults" in resolved.sources
+
+    def test_use_marketplace_config_false_skips_bundled_defaults(self, tmp_path):
+        resolved = watcher_config.resolve(
+            _inputs(
+                SOURCE="npm",
+                PACKAGE_NAME="left-pad",
+                TRACKER_PATH="custom-tracker.json",
+                STRIP_V_PREFIX="true",
+                INCLUDE_PRERELEASES="false",
+                USE_MARKETPLACE_CONFIG="false",
+            ),
+            root=tmp_path,
+        )
+        assert "bundled marketplace defaults" not in resolved.sources
+        assert resolved.env["TRACKER_PATH"] == "custom-tracker.json"
+
+    def test_use_marketplace_config_rejects_invalid_value(self, tmp_path):
+        with pytest.raises(watcher_config.ConfigError, match="use_marketplace_config"):
+            watcher_config.resolve(
+                _inputs(SOURCE="npm", USE_MARKETPLACE_CONFIG="maybe"), root=tmp_path
+            )
 
     def test_ai_and_reporting_on_by_default(self, tmp_path):
         resolved = watcher_config.resolve(

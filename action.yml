@@ -145,6 +145,14 @@ inputs:
       config is applied.
     required: false
     default: ''
+  use_marketplace_config:
+    description: >-
+      `true` (default) applies the bundled marketplace defaults first,
+      then layers global/repo/inline config and inputs on top. Set
+      `false` to skip the bundled tier entirely and start from an empty
+      baseline.
+    required: false
+    default: 'true'
   enable_ai:
     description: >-
       Kill switch for every AI feature. Empty defers to
@@ -286,6 +294,7 @@ runs:
         USE_GLOBAL_CONFIG: ${{ inputs.use_global_config }}
         GLOBAL_CONFIG_PATH: ${{ inputs.global_config_path }}
         GLOBAL_CONFIG_JSON: ${{ inputs.global_config_json }}
+        USE_MARKETPLACE_CONFIG: ${{ inputs.use_marketplace_config }}
         ENABLE_AI: ${{ inputs.enable_ai }}
         AI_PROVIDER: ${{ inputs.ai_provider }}
         ENABLE_JOB_SUMMARY: ${{ inputs.enable_job_summary }}
