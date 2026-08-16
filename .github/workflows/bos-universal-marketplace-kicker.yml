@@ -3,7 +3,7 @@
 # Blackout Secure universal Marketplace kicker (hub-managed).
 # Customize via `.github/bos-universal-config.json`, not this file.
 # Schema docs: https://github.com/blackoutsecure/bos-automation-hub
-name: Blackout Secure Universal Marketplace
+name: '[KICKER] Blackout Secure Universal Marketplace'
 run-name: >-
   Blackout Secure / marketplace / ${{
     github.event_name == 'pull_request_target'
@@ -63,7 +63,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: marketplace-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.operation || 'validate' }}
+  group: bos-marketplace-kicker-${{ github.repository }}-${{ github.ref }}-${{ inputs.operation || 'validate' }}
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || inputs.operation != 'release' }}
 
 jobs:
@@ -144,8 +144,8 @@ jobs:
       contents: read
     uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-marketplace.yml@dev
     with:
-      action_yml_path: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.action_yml_path || 'action.yml' }}
-      run_branding_preview: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.run_branding_preview != false }}
+      action_yml_path: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.action_yml_path || 'action.yml' }}
+      run_branding_preview: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.run_branding_preview != false }}
       run_name_check: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'name-check' }}
 
   validate-main:
@@ -162,8 +162,8 @@ jobs:
       contents: read
     uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-marketplace.yml@main
     with:
-      action_yml_path: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.action_yml_path || 'action.yml' }}
-      run_branding_preview: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.run_branding_preview != false }}
+      action_yml_path: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.action_yml_path || 'action.yml' }}
+      run_branding_preview: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.run_branding_preview != false }}
       run_name_check: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'name-check' }}
 
   guard:
@@ -172,7 +172,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request_target'
       && github.event.pull_request.base.ref
-        == (fromJson(needs.parse_config.outputs.cfg).marketplace.target_branch || 'main')
+        == (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.target_branch || 'main')
     permissions:
       contents: read
       pull-requests: read
@@ -183,8 +183,8 @@ jobs:
       check_pr_diff: true
       check_tree_state: true
       require_action_yml: true
-      blocked_paths: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.blocked_paths || '.github/workflows/' }}
-      required_paths: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.required_paths || '' }}
+      blocked_paths: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.blocked_paths || '.github/workflows/' }}
+      required_paths: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.required_paths || '' }}
 
   # Scores the push's changes for auto-publish significance (see the kit's
   # "Auto-publish relevance gate" README section). Push-only: PRs and manual
@@ -282,18 +282,18 @@ jobs:
       models: read
     uses: blackoutsecure/bos-automation-hub/.github/workflows/release-promote.yml@main
     with:
-      source_branch: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.source_branch || github.event.repository.default_branch }}
-      target_branch: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.target_branch || 'main' }}
-      allowlist_paths: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.allowlist_paths }}
-      include_dependabot_config: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.include_dependabot_config != false }}
-      include_github_metadata: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.include_github_metadata == true }}
-      extra_sync_paths: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.extra_sync_paths || '' }}
+      source_branch: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.source_branch || github.event.repository.default_branch }}
+      target_branch: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.target_branch || 'main' }}
+      allowlist_paths: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.allowlist_paths }}
+      include_dependabot_config: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.include_dependabot_config != false }}
+      include_github_metadata: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.include_github_metadata == true }}
+      extra_sync_paths: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.extra_sync_paths || '' }}
       tag_name: ${{ inputs.tag_name }}
       dry_run: ${{ inputs.dry_run || false }}
       release_draft: ${{ inputs.draft || false }}
       publish_release: ${{ github.event_name != 'workflow_dispatch' || inputs.operation == 'release' }}
-      require_source_release: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'promote' && fromJson(needs.parse_config.outputs.cfg).marketplace.require_source_release != false }}
-      source_release_max_age_hours: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.source_release_max_age_hours || 168 }}
+      require_source_release: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'promote' && fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.require_source_release != false }}
+      source_release_max_age_hours: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.source_release_max_age_hours || 168 }}
       # release_label (none/prerelease/latest, default auto) resolves the
       # GitHub Release's flags. "auto" reads the source branch: dev is
       # pre-release, main is the latest production release, anything else
@@ -301,19 +301,19 @@ jobs:
       # sync-files/config/marketplace-kicker-global-config.json > "auto".
       release_prerelease: >-
         ${{
-          (fromJson(needs.parse_config.outputs.cfg).marketplace.release_label || 'auto') == 'prerelease'
+          (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.release_label || 'auto') == 'prerelease'
           || (
-            (fromJson(needs.parse_config.outputs.cfg).marketplace.release_label || 'auto') == 'auto'
-            && (fromJson(needs.parse_config.outputs.cfg).marketplace.source_branch || github.event.repository.default_branch) == 'dev'
+            (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.release_label || 'auto') == 'auto'
+            && (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.source_branch || github.event.repository.default_branch) == 'dev'
           )
         }}
       release_make_latest: >-
         ${{
           (
-            (fromJson(needs.parse_config.outputs.cfg).marketplace.release_label || 'auto') == 'latest'
+            (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.release_label || 'auto') == 'latest'
             || (
-              (fromJson(needs.parse_config.outputs.cfg).marketplace.release_label || 'auto') == 'auto'
-              && (fromJson(needs.parse_config.outputs.cfg).marketplace.source_branch || github.event.repository.default_branch) == 'main'
+              (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.release_label || 'auto') == 'auto'
+              && (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.source_branch || github.event.repository.default_branch) == 'main'
             )
           ) && 'true' || 'false'
         }}
@@ -361,7 +361,7 @@ jobs:
     if: >-
       always()
       && needs.parse_config.result == 'success'
-      && fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.enable == true
+      && fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.enable == true
       && (
         (github.event_name == 'workflow_dispatch' && inputs.operation == 'metadata')
         || (
@@ -381,21 +381,21 @@ jobs:
       models: read
     uses: blackoutsecure/bos-automation-hub/.github/workflows/repo-metadata-sync.yml@main
     with:
-      checkout_ref: ${{ (inputs.operation == 'release' || github.event_name == 'push') && needs.release.outputs.tag_name || (fromJson(needs.parse_config.outputs.cfg).marketplace.target_branch || 'main') }}
-      description: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.description || '' }}
-      description_mode: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.description_mode || 'auto' }}
-      description_fallback: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.description_fallback || '' }}
-      homepage: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.homepage || '' }}
-      topics: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.topics || '' }}
-      generate_topics: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.generate_topics == true }}
-      topics_fallback: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.topics_fallback || '' }}
-      primary_category: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.categories.primary || 'auto' }}
-      secondary_category: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.categories.secondary || 'auto' }}
-      marketplace_slug: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.marketplace_slug || '' }}
-      ai_enabled: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.ai_enabled != false }}
-      ai_model: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.ai_model || 'auto' }}
-      show_releases: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.show_releases != false }}
-      show_deployments: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.show_deployments == true }}
-      show_packages: ${{ fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.show_packages == true }}
-      dry_run: ${{ inputs.dry_run || fromJson(needs.parse_config.outputs.cfg).marketplace.repo_metadata.dry_run == true }}
+      checkout_ref: ${{ (inputs.operation == 'release' || github.event_name == 'push') && needs.release.outputs.tag_name || (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.target_branch || 'main') }}
+      description: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.description || '' }}
+      description_mode: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.description_mode || 'auto' }}
+      description_fallback: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.description_fallback || '' }}
+      homepage: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.homepage || '' }}
+      topics: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.topics || '' }}
+      generate_topics: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.generate_topics == true }}
+      topics_fallback: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.topics_fallback || '' }}
+      primary_category: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.categories.primary || 'auto' }}
+      secondary_category: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.categories.secondary || 'auto' }}
+      marketplace_slug: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.marketplace_slug || '' }}
+      ai_enabled: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.ai_enabled != false }}
+      ai_model: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.ai_model || 'auto' }}
+      show_releases: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.show_releases != false }}
+      show_deployments: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.show_deployments == true }}
+      show_packages: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.show_packages == true }}
+      dry_run: ${{ inputs.dry_run || fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.dry_run == true }}
     secrets: inherit

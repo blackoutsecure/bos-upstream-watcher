@@ -3,7 +3,7 @@
 # Blackout Secure universal action test kicker (hub-managed).
 # Customize via `.github/bos-universal-config.json`, not this file.
 # Schema docs: https://github.com/blackoutsecure/bos-automation-hub
-name: Blackout Secure Universal Action Test
+name: '[KICKER] Blackout Secure Universal Action Test'
 run-name: >-
   Blackout Secure / action test / ${{
     github.event_name == 'pull_request'
@@ -27,6 +27,10 @@ run-name: >-
 
 permissions:
   contents: read
+
+concurrency:
+  group: bos-action-test-kicker-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   sync-check:

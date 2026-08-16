@@ -3,7 +3,7 @@
 # Blackout Secure managed file sync kicker (hub-managed).
 # Customize via `.github/bos-universal-config.json`, not this file.
 # Schema docs: https://github.com/blackoutsecure/bos-automation-hub
-name: Blackout Secure Managed File Sync
+name: '[KICKER] Blackout Secure Managed File Sync'
 run-name: >-
   Blackout Secure managed file sync / ${{
     github.event_name == 'workflow_dispatch'
@@ -29,6 +29,10 @@ run-name: >-
 
 permissions:
   contents: read
+
+concurrency:
+  group: bos-sync-kicker-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   parse_config:

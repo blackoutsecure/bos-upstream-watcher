@@ -3,7 +3,7 @@
 # Blackout Secure universal security and policy kicker (hub-managed).
 # Customize via `.github/bos-universal-config.json`, not this file.
 # Schema docs: https://github.com/blackoutsecure/bos-automation-hub
-name: Blackout Secure Universal Security
+name: '[KICKER] Blackout Secure Universal Security'
 run-name: >-
   Blackout Secure / security / ${{
     github.event_name == 'pull_request'
@@ -32,6 +32,10 @@ run-name: >-
 
 permissions:
   contents: read
+
+concurrency:
+  group: bos-security-kicker-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   sync-check:
