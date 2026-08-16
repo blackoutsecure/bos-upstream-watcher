@@ -10,10 +10,14 @@ run-name: >-
       && format('PR #{0}', github.event.pull_request.number)
       || github.event_name == 'merge_group'
       && 'merge queue'
+      || github.event_name == 'schedule'
+      && 'scheduled'
       || 'manual'
   }}
 
 "on":
+  schedule:
+    - cron: '43 14 * * *'
   pull_request:
     branches: [main, dev]
   push:
@@ -25,8 +29,22 @@ permissions:
   contents: read
 
 jobs:
+  sync-check:
+    name: Sync managed kicker and config
+    permissions:
+      contents: write
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-sync.yml@main
+    with:
+      mode: commit
+    secrets: inherit
+
   parse_config:
     name: Parse universal config
+    needs: sync-check
+    if: >-
+      needs.sync-check.result == 'success'
+      && !contains(needs.sync-check.outputs.changed_files, '.github/workflows/bos-universal-security-kicker.yml')
+      && !contains(needs.sync-check.outputs.changed_files, '.github/bos-universal-config.json')
     # Resolve runner from org-shared `vars.DEFAULT_RUNNER` when set,
     # supporting both bare label and JSON-array formats. Fallback to
     # `ubuntu-latest` if the variable is not defined in the consumer.

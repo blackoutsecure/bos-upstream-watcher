@@ -4,18 +4,9 @@
 # entries need to live here.
 
 # Python
-__pycache__/
-*.py[cod]
 *$py.class
-.venv/
 venv/
 env/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.coverage
-coverage.xml
-htmlcov/
 
 # Local dev artefacts (repo-specific)
 tracker-*.json
@@ -40,9 +31,20 @@ coverage/
 __pycache__/
 *.py[cod]
 .venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # Local secrets (never commit these)
 .env
 .env.*
 !.env.example
 # <<< managed-file-sync:common <<<
+
+# >>> managed-file-sync:coverage_artifacts >>>
+# Managed by Blackout Secure Managed File Sync — configure services in .github/bos-universal-config.json.
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+# <<< managed-file-sync:coverage_artifacts <<<

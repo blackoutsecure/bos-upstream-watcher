@@ -24,8 +24,22 @@ permissions:
   contents: read
 
 jobs:
+  sync-check:
+    name: Sync managed kicker and config
+    permissions:
+      contents: write
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-sync.yml@main
+    with:
+      mode: commit
+    secrets: inherit
+
   parse_config:
     name: Parse universal config
+    needs: sync-check
+    if: >-
+      needs.sync-check.result == 'success'
+      && !contains(needs.sync-check.outputs.changed_files, '.github/workflows/bos-universal-action-test-kicker.yml')
+      && !contains(needs.sync-check.outputs.changed_files, '.github/bos-universal-config.json')
     runs-on: ${{ fromJSON(startsWith(vars.DEFAULT_RUNNER || 'ubuntu-latest', '[') && (vars.DEFAULT_RUNNER || 'ubuntu-latest') || format('"{0}"', vars.DEFAULT_RUNNER || 'ubuntu-latest')) }}
     timeout-minutes: 2
     outputs:

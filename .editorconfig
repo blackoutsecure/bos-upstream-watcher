@@ -5,8 +5,6 @@ root = true
 # put here will take effect over the hub's [*] / [Makefile] defaults
 # defined inside the marker block.
 
-[*.py]
-indent_size = 4
 
 # >>> bos-automation-hub:common >>>
 # Managed by https://github.com/blackoutsecure/bos-automation-hub — do not edit between markers.

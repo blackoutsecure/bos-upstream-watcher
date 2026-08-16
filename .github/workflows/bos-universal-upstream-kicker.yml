@@ -1,0 +1,126 @@
+# Managed by Blackout Secure Managed File Sync — configure services in .github/bos-universal-config.json.
+# Do not edit — every sync run overwrites this file.
+# Blackout Secure upstream watcher kicker (hub-managed).
+# Customize via `.github/bos-universal-config.json`, not this file.
+# Schema docs: https://github.com/blackoutsecure/bos-automation-hub
+name: Blackout Secure Upstream Watcher
+run-name: >-
+  Blackout Secure / upstream watcher / ${{
+    github.event_name == 'workflow_dispatch' && 'manual'
+      || github.event_name == 'schedule' && 'scheduled'
+      || 'config changed'
+  }}
+
+"on":
+  schedule:
+    - cron: '17 */6 * * *'
+  push:
+    paths:
+      - '.github/bos-universal-config.json'
+      - '.github/workflows/bos-universal-upstream-kicker.yml'
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: Re-run downstream dispatch even when the version is unchanged.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync-check:
+    name: Sync managed kicker and config
+    permissions:
+      contents: write
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-sync.yml@main
+    with:
+      mode: commit
+    secrets: inherit
+
+  parse_config:
+    name: Parse upstream watcher config
+    needs: sync-check
+    if: >-
+      needs.sync-check.result == 'success'
+      && !contains(needs.sync-check.outputs.changed_files, '.github/workflows/bos-universal-upstream-kicker.yml')
+      && !contains(needs.sync-check.outputs.changed_files, '.github/bos-universal-config.json')
+    runs-on: ${{ fromJSON(startsWith(vars.DEFAULT_RUNNER || 'ubuntu-latest', '[') && (vars.DEFAULT_RUNNER || 'ubuntu-latest') || format('"{0}"', vars.DEFAULT_RUNNER || 'ubuntu-latest')) }}
+    timeout-minutes: 2
+    outputs:
+      cfg: ${{ steps.config.outputs.cfg }}
+      target_ref: ${{ steps.target_ref.outputs.ref }}
+    steps:
+      - name: Checkout trusted configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Load universal config
+        id: config
+        uses: blackoutsecure/bos-automation-hub/.github/actions/shared/universal-config@main
+        with:
+          config_path: .github/bos-universal-config.json
+          allow_missing: 'true'
+      - name: Checkout hub resolver
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: blackoutsecure/bos-automation-hub
+          ref: ${{ github.ref_name == 'dev' && 'dev' || 'main' }}
+          path: hub-runtime
+          sparse-checkout: .github/actions/shared/resolve-hub-ref
+          sparse-checkout-cone-mode: false
+      - name: Resolve target hub ref
+        id: target_ref
+        uses: ./hub-runtime/.github/actions/shared/resolve-hub-ref
+        with:
+          event_name: ${{ github.event_name }}
+          base_ref: ${{ github.base_ref }}
+          ref_name: ${{ github.ref_name }}
+
+  upstream-dev:
+    name: Upstream watcher (dev)
+    needs: parse_config
+    if: needs.parse_config.outputs.target_ref == 'dev'
+    permissions:
+      contents: write
+      actions: write
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/monitor-upstream-release.yml@dev
+    with:
+      upstream_repo: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.upstream_repo || '' }}
+      source: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.source || '' }}
+      upstream_branch: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.upstream_branch || '' }}
+      version_file_path: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.version_file_path || '' }}
+      image_ref: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.image_ref || '' }}
+      package_name: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.package_name || '' }}
+      version_url: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.version_url || '' }}
+      version_regex: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.version_regex || '' }}
+      tag_pattern: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.tag_pattern || '' }}
+      include_prereleases: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.include_prereleases || 'false' }}
+      track_file: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.tracker_path || '.github/tracked-release.json' }}
+      target_workflows: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.target_workflows || '' }}
+      force_dispatch: ${{ inputs.force_run && 'true' || 'false' }}
+    secrets: inherit
+
+  upstream-main:
+    name: Upstream watcher (main)
+    needs: parse_config
+    if: needs.parse_config.outputs.target_ref == 'main'
+    permissions:
+      contents: write
+      actions: write
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/monitor-upstream-release.yml@main
+    with:
+      upstream_repo: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.upstream_repo || '' }}
+      source: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.source || '' }}
+      upstream_branch: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.upstream_branch || '' }}
+      version_file_path: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.version_file_path || '' }}
+      image_ref: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.image_ref || '' }}
+      package_name: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.package_name || '' }}
+      version_url: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.version_url || '' }}
+      version_regex: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.version_regex || '' }}
+      tag_pattern: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.tag_pattern || '' }}
+      include_prereleases: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.include_prereleases || 'false' }}
+      track_file: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.tracker_path || '.github/tracked-release.json' }}
+      target_workflows: ${{ fromJson(needs.parse_config.outputs.cfg).upstream_watcher.target_workflows || '' }}
+      force_dispatch: ${{ inputs.force_run && 'true' || 'false' }}
+    secrets: inherit

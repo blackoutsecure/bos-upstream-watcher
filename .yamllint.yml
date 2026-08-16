@@ -1,0 +1,39 @@
+# Managed by Blackout Secure Managed File Sync — configure services in .github/bos-universal-config.json.
+# Do not edit — every sync run overwrites this file.
+extends: default
+
+ignore: |
+  .git/
+  .venv/
+  node_modules/
+  dist/
+
+rules:
+  # GitHub Actions expressions and shell commands routinely exceed 120 cols.
+  line-length:
+    max: 200
+    level: warning
+
+  # GitHub workflows legitimately use the key "on:" which yamllint
+  # interprets as a truthy alias. Relax to warning so it doesn't fail.
+  truthy:
+    allowed-values: ["true", "false", "on", "off", "yes", "no"]
+    check-keys: false
+
+  # Permit either flow- or block-style mapping; both appear in workflows.
+  braces:
+    level: warning
+
+  # Comments don't need to start with a space (some tooling emits "#--").
+  comments:
+    require-starting-space: false
+    min-spaces-from-content: 1
+
+  # Indentation: 2 spaces, but allow sequences to be flush with parent.
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+    check-multi-line-strings: false
+
+  # Document-start markers (---) are noisy in workflow files.
+  document-start: disable
