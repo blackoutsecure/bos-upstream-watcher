@@ -334,7 +334,7 @@ class TestActionYaml:
         assert "branches: [main, dev]" in marketplace_body
         assert "pull_request_target:" in marketplace_body
         assert "branches: [main]" in marketplace_body
-        assert "options: [validate, name-check, release, metadata]" in marketplace_body
+        assert "options: [validate, name-check, promote, release, metadata]" in marketplace_body
         # Kicker dispatches to the hub ref matching the branch under test.
         assert "bos-universal-marketplace.yml@main" in marketplace_body
         assert "bos-universal-marketplace.yml@dev" in marketplace_body
@@ -423,7 +423,8 @@ class TestActionYaml:
             encoding="utf-8"
         )
         for body in (security_body, sync_body, marketplace_body, action_test_body):
-            assert body.startswith("# Managed by Blackout Secure Managed File Sync")
+            assert body.startswith("# Blackout Secure ")
+            assert "(hub-managed)." in body.splitlines()[0]
 
         assert not (root / "bos-launchpad-config.json").exists()
         assert not (root / "bos-universal-config.json").exists()
