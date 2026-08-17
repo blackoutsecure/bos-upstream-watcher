@@ -212,7 +212,7 @@ jobs:
           persist-credentials: true
       - name: Score relevance
         id: gate
-        uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@b0b0c4ee244fadb9e1164bff190f5a401ee87eb6 # dev
+        uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@7c85b697b0cc3ffdeeade7f077591d9e33f42e64 # v0.1.27
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_MODELS_TOKEN || github.token }}
       - name: Checkout hub commit-and-push helper
@@ -338,7 +338,7 @@ jobs:
         with:
           token: ${{ secrets.WORKFLOW_SYNC_PAT || github.token }}
           persist-credentials: true
-      - uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@b0b0c4ee244fadb9e1164bff190f5a401ee87eb6 # dev
+      - uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@7c85b697b0cc3ffdeeade7f077591d9e33f42e64 # v0.1.27
         with:
           reset: 'true'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
