@@ -179,7 +179,7 @@ inputs:
       Token used for authenticated GitHub REST calls. Falls back to
       `github.token`. Anonymous calls are rate-limited to 60/hr.
     required: false
-    default: ${{ github.token }}
+    default: ''
   user_agent:
     description: >-
       Custom `User-Agent` header sent on outbound HTTP requests.
@@ -298,7 +298,7 @@ runs:
         ENABLE_AI: ${{ inputs.enable_ai }}
         AI_PROVIDER: ${{ inputs.ai_provider }}
         ENABLE_JOB_SUMMARY: ${{ inputs.enable_job_summary }}
-        GH_TOKEN: ${{ inputs.github_token }}
+        GH_TOKEN: ${{ inputs.github_token || github.token }}
         USER_AGENT_OVERRIDE: ${{ inputs.user_agent }}
       run: |
         set -euo pipefail
