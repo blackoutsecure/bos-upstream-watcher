@@ -1,5 +1,3 @@
-# Managed by Blackout Secure Managed File Sync — configure services in .github/bos-universal-config.json.
-# Do not edit — every sync run overwrites this file.
 # Blackout Secure universal action test kicker (hub-managed).
 # Customize via `.github/bos-universal-config.json`, not this file.
 # Schema docs: https://github.com/blackoutsecure/bos-automation-hub
