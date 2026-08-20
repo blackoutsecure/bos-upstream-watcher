@@ -212,7 +212,7 @@ jobs:
           persist-credentials: true
       - name: Score relevance
         id: gate
-        uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@7c85b697b0cc3ffdeeade7f077591d9e33f42e64 # v0.1.27
+        uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@c3ca87e5c5c9d72237ce8ff426a759b0f878de91 # v0.1.28
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_MODELS_TOKEN || github.token }}
       - name: Checkout hub commit-and-push helper
@@ -290,7 +290,8 @@ jobs:
       dry_run: ${{ inputs.dry_run || false }}
       release_draft: ${{ inputs.draft || false }}
       publish_release: ${{ github.event_name != 'workflow_dispatch' || inputs.operation == 'release' }}
-      require_source_release: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'promote' && fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.require_source_release != false }}
+      require_source_release: >-
+        ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'promote' && fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.require_source_release != false }}
       source_release_max_age_hours: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.source_release_max_age_hours || 168 }}
       # release_label (none/prerelease/latest, default auto) resolves the
       # GitHub Release's flags. "auto" reads the source branch: dev is
@@ -338,7 +339,7 @@ jobs:
         with:
           token: ${{ secrets.WORKFLOW_SYNC_PAT || github.token }}
           persist-credentials: true
-      - uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@7c85b697b0cc3ffdeeade7f077591d9e33f42e64 # v0.1.27
+      - uses: blackoutsecure/bos-marketplace-kit/.github/actions/relevance-gate@c3ca87e5c5c9d72237ce8ff426a759b0f878de91 # v0.1.28
         with:
           reset: 'true'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -353,12 +354,59 @@ jobs:
           files: .github/marketplace-relevance-score.json
           message: 'chore: reset marketplace relevance score after auto-publish'
 
-  metadata:
-    name: Marketplace repository metadata
+  metadata-dev:
+    name: Marketplace repository metadata (dev)
     needs: [parse_config, release]
     if: >-
       always()
       && needs.parse_config.result == 'success'
+      && needs.parse_config.outputs.target_ref == 'dev'
+      && fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.enable == true
+      && (
+        (github.event_name == 'workflow_dispatch' && inputs.operation == 'metadata')
+        || (
+          github.event_name == 'workflow_dispatch'
+          && inputs.operation == 'release'
+          && needs.release.result == 'success'
+          && !inputs.dry_run
+          && !inputs.draft
+        )
+        || (
+          github.event_name == 'push'
+          && needs.release.result == 'success'
+        )
+      )
+    permissions:
+      contents: read
+      models: read
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/repo-metadata-sync.yml@dev
+    with:
+      checkout_ref: ${{ needs.release.result == 'success' && needs.release.outputs.tag_name || (fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.target_branch || 'main') }}
+      description: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.description || '' }}
+      description_mode: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.description_mode || 'auto' }}
+      description_fallback: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.description_fallback || '' }}
+      homepage: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.homepage || '' }}
+      topics: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.topics || '' }}
+      generate_topics: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.generate_topics == true }}
+      topics_fallback: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.topics_fallback || '' }}
+      primary_category: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.categories.primary || 'auto' }}
+      secondary_category: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.categories.secondary || 'auto' }}
+      marketplace_slug: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.marketplace_slug || '' }}
+      ai_enabled: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.ai_enabled != false }}
+      ai_model: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.ai_model || 'auto' }}
+      show_releases: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.show_releases != false }}
+      show_deployments: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.show_deployments == true }}
+      show_packages: ${{ fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.show_packages == true }}
+      dry_run: ${{ inputs.dry_run || fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.dry_run == true }}
+    secrets: inherit
+
+  metadata-main:
+    name: Marketplace repository metadata (main)
+    needs: [parse_config, release]
+    if: >-
+      always()
+      && needs.parse_config.result == 'success'
+      && needs.parse_config.outputs.target_ref == 'main'
       && fromJson(needs.parse_config.outputs.cfg || '{}').marketplace.repo_metadata.enable == true
       && (
         (github.event_name == 'workflow_dispatch' && inputs.operation == 'metadata')
