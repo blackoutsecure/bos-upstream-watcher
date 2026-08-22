@@ -58,11 +58,11 @@ jobs:
           repository: blackoutsecure/bos-automation-hub
           ref: ${{ github.ref_name == 'dev' && 'dev' || 'main' }}
           path: hub-runtime
-          sparse-checkout: .github/actions/shared/resolve-hub-ref
+          sparse-checkout: .github/actions/resolve-hub-ref
           sparse-checkout-cone-mode: false
       - name: Resolve target hub ref
         id: target_ref
-        uses: ./hub-runtime/.github/actions/shared/resolve-hub-ref
+        uses: ./hub-runtime/.github/actions/resolve-hub-ref
         with:
           event_name: ${{ github.event_name }}
           base_ref: ${{ github.base_ref }}

@@ -342,8 +342,8 @@ class TestActionYaml:
         assert "marketplace-repo-guard.yml@main" in marketplace_body
         assert "release-promote.yml@main" in marketplace_body
         assert "repo-metadata-sync.yml@main" in marketplace_body
-        assert "shared/universal-config@main" in marketplace_body
-        assert "shared/universal-config@dev" not in marketplace_body
+        assert ".github/actions/universal-config@main" in marketplace_body
+        assert ".github/actions/universal-config@dev" not in marketplace_body
         assert "release-promote.yml@dev" not in marketplace_body
         assert "github.event.repository.default_branch" in marketplace_body
         assert "cfg: ${{ steps.config.outputs.cfg }}" in marketplace_body

@@ -59,7 +59,7 @@ jobs:
           persist-credentials: false
       - name: Load universal config
         id: config
-        uses: blackoutsecure/bos-automation-hub/.github/actions/shared/universal-config@main
+        uses: blackoutsecure/bos-automation-hub/.github/actions/universal-config@main
         with:
           config_path: .github/bos-universal-config.json
           allow_missing: 'true'
@@ -69,11 +69,11 @@ jobs:
           repository: blackoutsecure/bos-automation-hub
           ref: ${{ github.ref_name == 'dev' && 'dev' || 'main' }}
           path: hub-runtime
-          sparse-checkout: .github/actions/shared/resolve-hub-ref
+          sparse-checkout: .github/actions/resolve-hub-ref
           sparse-checkout-cone-mode: false
       - name: Resolve target hub ref
         id: target_ref
-        uses: ./hub-runtime/.github/actions/shared/resolve-hub-ref
+        uses: ./hub-runtime/.github/actions/resolve-hub-ref
         with:
           event_name: ${{ github.event_name }}
           base_ref: ${{ github.base_ref }}

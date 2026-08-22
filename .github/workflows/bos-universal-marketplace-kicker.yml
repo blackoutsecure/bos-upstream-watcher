@@ -105,7 +105,7 @@ jobs:
           sparse-checkout-cone-mode: false
       - name: Load universal config
         id: config
-        uses: blackoutsecure/bos-automation-hub/.github/actions/shared/universal-config@main
+        uses: blackoutsecure/bos-automation-hub/.github/actions/universal-config@main
         with:
           config_path: .github/bos-universal-config.json
           allow_missing: 'false'
@@ -118,11 +118,11 @@ jobs:
           repository: blackoutsecure/bos-automation-hub
           ref: ${{ github.ref_name == 'dev' && 'dev' || 'main' }}
           path: hub-runtime
-          sparse-checkout: .github/actions/shared/resolve-hub-ref
+          sparse-checkout: .github/actions/resolve-hub-ref
           sparse-checkout-cone-mode: false
       - name: Resolve target hub ref
         id: target_ref
-        uses: ./hub-runtime/.github/actions/shared/resolve-hub-ref
+        uses: ./hub-runtime/.github/actions/resolve-hub-ref
         with:
           event_name: ${{ github.event_name }}
           base_ref: ${{ github.base_ref }}
@@ -222,7 +222,7 @@ jobs:
           repository: blackoutsecure/bos-automation-hub
           ref: ${{ needs.parse_config.outputs.target_ref }}
           path: hub-runtime
-          sparse-checkout: .github/actions/shared/commit-and-push
+          sparse-checkout: .github/actions/commit-and-push
           sparse-checkout-cone-mode: false
       - name: Persist the running score
         if: always()
@@ -232,7 +232,7 @@ jobs:
           set -euo pipefail
           state_path="$(git status --porcelain -- '.github/marketplace-relevance-score.json' | awk '{print $2}')"
           echo "changed_files=${state_path}" >> "${GITHUB_OUTPUT}"
-      - uses: ./hub-runtime/.github/actions/shared/commit-and-push
+      - uses: ./hub-runtime/.github/actions/commit-and-push
         if: always() && steps.persist.outputs.changed_files != ''
         with:
           files: ${{ steps.persist.outputs.changed_files }}
@@ -347,9 +347,9 @@ jobs:
           repository: blackoutsecure/bos-automation-hub
           ref: ${{ needs.parse_config.outputs.target_ref }}
           path: hub-runtime
-          sparse-checkout: .github/actions/shared/commit-and-push
+          sparse-checkout: .github/actions/commit-and-push
           sparse-checkout-cone-mode: false
-      - uses: ./hub-runtime/.github/actions/shared/commit-and-push
+      - uses: ./hub-runtime/.github/actions/commit-and-push
         with:
           files: .github/marketplace-relevance-score.json
           message: 'chore: reset marketplace relevance score after auto-publish'
