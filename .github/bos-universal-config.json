@@ -23,7 +23,8 @@
             "bos_universal_sync_kicker",
             "bos_universal_upstream_kicker",
             "bos_universal_marketplace_kicker",
-            "bos_universal_action_test_kicker"
+            "bos_universal_action_test_kicker",
+            "python_ecosystem"
         ],
         "exclude_services": [
             "shellcheck",

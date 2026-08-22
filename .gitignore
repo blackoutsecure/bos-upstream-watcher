@@ -1,12 +1,7 @@
 # Repo-specific ignores live OUTSIDE the hub-managed marker block
-# below. The hub's `common` block already covers OS noise, editor
-# noise, .env*, and private-key patterns — only Python-ecosystem
-# entries need to live here.
-
-# Python
-*$py.class
-venv/
-env/
+# below. The hub's `common` block covers OS/editor noise, secrets,
+# and logs; the `python_ecosystem` service covers Python venvs and
+# caches. Only genuinely repo-specific artefacts live here.
 
 # Local dev artefacts (repo-specific)
 tracker-*.json
