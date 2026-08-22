@@ -1,163 +1,174 @@
 {
-  "organization": {
-    "runners": {
-      "default": "ubuntu-latest",
-      "x64": "ubuntu-latest",
-      "arm64": "ubuntu-24.04-arm"
+    "organization": {
+        "runners": {
+            "default": "ubuntu-latest",
+            "x64": "ubuntu-latest",
+            "arm64": "ubuntu-24.04-arm"
+        },
+        "reporting": {
+            "enable_job_summary": true,
+            "enable_annotations": true,
+            "title_prefix": "Blackout Secure",
+            "fail_on": "fail"
+        },
+        "defaults": {
+            "timeout_minutes": 30
+        }
     },
-    "reporting": {
-      "enable_job_summary": true,
-      "enable_annotations": true,
-      "title_prefix": "Blackout Secure",
-      "fail_on": "fail"
+    "managed_file_sync": {
+        "mode": "commit",
+        "services": [
+            "baseline",
+            "bos_universal_security_kicker",
+            "bos_universal_sync_kicker",
+            "bos_universal_upstream_kicker",
+            "bos_universal_marketplace_kicker",
+            "bos_universal_action_test_kicker"
+        ],
+        "exclude_services": [
+            "shellcheck",
+            "prettier"
+        ],
+        "ai": {
+            "enable_ai_drift_summary": true,
+            "ai_drift_summary_provider": "auto",
+            "enable_ai_error_remediation": true,
+            "ai_error_remediation_provider": "auto",
+            "local_heuristic_fallback": true
+        },
+        "service_definitions": {
+            "dependabot_actions": {
+                "mode": "block",
+                "description": "Dependabot updates for GitHub Actions, targeted at the dev branch where the workflows live.",
+                "files": [
+                    {
+                        "path": ".github/dependabot.yml",
+                        "scaffold": [
+                            "version: 2",
+                            "updates:"
+                        ],
+                        "content_lines": [
+                            "  - package-ecosystem: github-actions",
+                            "    directory: /",
+                            "    target-branch: dev",
+                            "    schedule:",
+                            "      interval: weekly",
+                            "      day: monday",
+                            "      time: \"06:00\"",
+                            "      timezone: \"Etc/UTC\"",
+                            "    open-pull-requests-limit: 5",
+                            "    commit-message:",
+                            "      prefix: \"ci\"",
+                            "      include: scope",
+                            "    labels:",
+                            "      - dependencies",
+                            "      - github-actions",
+                            "    groups:",
+                            "      github-actions:",
+                            "        patterns:",
+                            "          - \"actions/*\""
+                        ]
+                    }
+                ]
+            }
+        }
     },
-    "defaults": {
-      "timeout_minutes": 30
+    "security": {
+        "enable_lint": true,
+        "enable_node_lint": false,
+        "enable_python_lint": true,
+        "python_version": "3.12",
+        "enable_shell_lint": false,
+        "enable_dependency_review": true,
+        "enable_code_scan": true,
+        "code_scan_fail_on": "fail",
+        "code_scan_http_timeout": 20,
+        "_note_enable_pinned_actions_check": "Off until the hub adds blackoutsecure/bos-automation-hub to ALLOW_TAG_PIN in .github/actions/check-pinned-actions; the managed kickers must reference hub workflows by branch ref, which the gate reports as unpinned.",
+        "enable_pinned_actions_check": false,
+        "enable_pr_title_check": true,
+        "enable_readme_header_check": true,
+        "readme_header_profile": "marketplace"
+    },
+    "action_test": {
+        "python_versions": [
+            "3.10",
+            "3.11",
+            "3.12"
+        ],
+        "os_matrix": [
+            "ubuntu-latest",
+            "macos-latest",
+            "windows-latest"
+        ],
+        "python_packages": [
+            "pytest>=8.0",
+            "ruff>=0.6"
+        ],
+        "pytest_args": "-q",
+        "enable_smoke_test": true,
+        "smoke_trigger": "push-dev",
+        "smoke_test_config": {
+            "source": "npm",
+            "package_name": "@actions/core",
+            "tracker_path": "none"
+        },
+        "timeout_pytest": 10,
+        "timeout_smoke": 5
+    },
+    "upstream_watcher": {
+        "source": "github_release",
+        "upstream_repo": "blackoutsecure/bos-upstream-watcher",
+        "include_prereleases": false,
+        "strip_v_prefix": true
+    },
+    "marketplace": {
+        "enabled": true,
+        "action_yml_path": "action.yml",
+        "source_branch": "dev",
+        "target_branch": "main",
+        "fail_on_warning": false,
+        "require_security": "warn",
+        "require_code_of_conduct": "warn",
+        "require_contributing": "warn",
+        "run_branding_preview": true,
+        "allowlist_paths": [
+            "action.yml",
+            "src",
+            "README.md",
+            "LICENSE",
+            "NOTICE"
+        ],
+        "blocked_paths": [
+            ".github/workflows/",
+            ".github/bos-universal-config.json",
+            ".editorconfig",
+            ".gitattributes",
+            ".gitignore",
+            ".markdownlint.json",
+            ".markdownlint.yaml",
+            "pyproject.toml",
+            "requirements-dev.txt",
+            "test/"
+        ],
+        "required_paths": [
+            ".github/dependabot.yml",
+            "action.yml",
+            "src",
+            "LICENSE",
+            "NOTICE",
+            "README.md"
+        ],
+        "include_dependabot_config": true,
+        "include_github_metadata": false,
+        "repo_metadata": {
+            "enable": false,
+            "description": "Detect the latest upstream version from GitHub releases, tags, branch files, container registries, npm, PyPI, or any URL \u2014 and report whether it changed.",
+            "homepage": "https://github.com/marketplace/actions/blackout-secure-upstream-watcher",
+            "generate_topics": true,
+            "topics_fallback": "github-actions,upstream,release-monitoring,semver,automation,dependency-tracking,python",
+            "show_releases": true,
+            "show_deployments": false,
+            "show_packages": false
+        }
     }
-  },
-  "managed_file_sync": {
-    "mode": "commit",
-    "services": [
-      "baseline",
-      "bos_universal_security_kicker",
-      "bos_universal_sync_kicker",
-      "bos_universal_upstream_kicker",
-      "bos_universal_marketplace_kicker",
-      "bos_universal_action_test_kicker"
-    ],
-    "exclude_services": [
-      "shellcheck",
-      "prettier"
-    ],
-    "ai": {
-      "enable_ai_drift_summary": true,
-      "ai_drift_summary_provider": "auto",
-      "enable_ai_error_remediation": true,
-      "ai_error_remediation_provider": "auto",
-      "local_heuristic_fallback": true
-    },
-    "service_definitions": {
-      "dependabot_actions": {
-        "mode": "block",
-        "description": "Dependabot updates for GitHub Actions, targeted at the dev branch where the workflows live.",
-        "files": [
-          {
-            "path": ".github/dependabot.yml",
-            "scaffold": [
-              "version: 2",
-              "updates:"
-            ],
-            "content_lines": [
-              "  - package-ecosystem: github-actions",
-              "    directory: /",
-              "    target-branch: dev",
-              "    schedule:",
-              "      interval: weekly",
-              "      day: monday",
-              "      time: \"06:00\"",
-              "      timezone: \"Etc/UTC\"",
-              "    open-pull-requests-limit: 5",
-              "    commit-message:",
-              "      prefix: \"ci\"",
-              "      include: scope",
-              "    labels:",
-              "      - dependencies",
-              "      - github-actions",
-              "    groups:",
-              "      github-actions:",
-              "        patterns:",
-              "          - \"actions/*\""
-            ]
-          }
-        ]
-      }
-    }
-  },
-  "security": {
-    "enable_lint": true,
-    "enable_node_lint": false,
-    "enable_python_lint": true,
-    "python_version": "3.12",
-    "enable_shell_lint": false,
-    "enable_dependency_review": true,
-    "enable_code_scan": true,
-    "code_scan_fail_on": "fail",
-    "code_scan_http_timeout": 20,
-    "_note_enable_pinned_actions_check": "Off until the hub adds blackoutsecure/bos-automation-hub to ALLOW_TAG_PIN in .github/actions/check-pinned-actions; the managed kickers must reference hub workflows by branch ref, which the gate reports as unpinned.",
-    "enable_pinned_actions_check": false,
-    "enable_pr_title_check": true,
-    "enable_readme_header_check": true,
-    "readme_header_profile": "marketplace"
-  },
-  "action_test": {
-    "python_versions": ["3.10", "3.11", "3.12"],
-    "os_matrix": ["ubuntu-latest", "macos-latest", "windows-latest"],
-    "python_packages": ["pytest>=8.0", "ruff>=0.6"],
-    "pytest_args": "-q",
-    "enable_smoke_test": true,
-    "smoke_trigger": "push-dev",
-    "smoke_test_config": {
-      "source": "npm",
-      "package_name": "@actions/core",
-      "tracker_path": "none"
-    },
-    "timeout_pytest": 10,
-    "timeout_smoke": 5
-  },
-  "upstream_watcher": {
-    "source": "github_release",
-    "upstream_repo": "blackoutsecure/bos-upstream-watcher",
-    "include_prereleases": false,
-    "strip_v_prefix": true
-  },
-  "marketplace": {
-    "enabled": true,
-    "action_yml_path": "action.yml",
-    "source_branch": "dev",
-    "target_branch": "main",
-    "fail_on_warning": false,
-    "require_security": "warn",
-    "require_code_of_conduct": "warn",
-    "require_contributing": "warn",
-    "run_branding_preview": true,
-    "allowlist_paths": [
-      "action.yml",
-      "src",
-      "README.md",
-      "LICENSE",
-      "NOTICE"
-    ],
-    "blocked_paths": [
-      ".github/workflows/",
-      ".github/bos-universal-config.json",
-      ".editorconfig",
-      ".gitattributes",
-      ".gitignore",
-      ".markdownlint.json",
-      ".markdownlint.yaml",
-      "pyproject.toml",
-      "requirements-dev.txt",
-      "test/"
-    ],
-    "required_paths": [
-      ".github/dependabot.yml",
-      "action.yml",
-      "src",
-      "LICENSE",
-      "NOTICE",
-      "README.md"
-    ],
-    "include_dependabot_config": true,
-    "include_github_metadata": false,
-    "repo_metadata": {
-      "enable": false,
-      "description": "Detect the latest upstream version from GitHub releases, tags, branch files, container registries, npm, PyPI, or any URL — and report whether it changed.",
-      "homepage": "https://github.com/marketplace/actions/blackout-secure-upstream-watcher",
-      "generate_topics": true,
-      "topics_fallback": "github-actions,upstream,release-monitoring,semver,automation,dependency-tracking,python",
-      "show_releases": true,
-      "show_deployments": false,
-      "show_packages": false
-    }
-  }
 }
