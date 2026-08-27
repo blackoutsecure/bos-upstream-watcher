@@ -102,8 +102,8 @@
             "windows-latest"
         ],
         "python_packages": [
-            "pytest>=8.0",
-            "ruff>=0.6"
+            "pytest>=9.1.1",
+            "ruff>=0.16.4"
         ],
         "pytest_args": "-q",
         "enable_smoke_test": true,

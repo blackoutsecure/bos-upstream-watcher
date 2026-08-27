@@ -484,6 +484,7 @@ class TestActionYaml:
             "bos_universal_upstream_kicker",
             "bos_universal_marketplace_kicker",
             "bos_universal_action_test_kicker",
+            "python_ecosystem",
         }
         assert set(sync["services"]) <= known
         assert set(sync["exclude_services"]) <= known

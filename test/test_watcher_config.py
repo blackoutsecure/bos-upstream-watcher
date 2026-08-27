@@ -106,7 +106,7 @@ class TestRepoConfig:
         assert resolved.env["UPSTREAM_REPO"] == "kubernetes/kubernetes"
         assert resolved.env["TRACKER_PATH"] == ".github/upstream/k8s.json"
         assert resolved.reporting.fail_on == "warn"
-        assert resolved.repository_config == ".github/bos-universal-config.json"
+        assert resolved.repository_config.replace("\\", "/") == ".github/bos-universal-config.json"
 
     def test_standalone_config_needs_no_section(self, tmp_path):
         _write(
@@ -303,10 +303,10 @@ class TestHubIntegrationContract:
         assert resolved.env["USER_AGENT_OVERRIDE"] == "blackoutsecure-bos-upstream-watcher"
         assert resolved.ai.enable_ai_release_summary is True
         assert resolved.reporting.fail_on == "fail"
-        assert resolved.repository_config == ".github/bos-universal-config.json"
-        assert (
-            "global config (hub-config/sync-files/config/upstream-watcher-global-config.json)"
-            in (resolved.sources)
+        assert resolved.repository_config.replace("\\", "/") == ".github/bos-universal-config.json"
+        assert any(
+            s.replace("\\", "/") == "global config (hub-config/sync-files/config/upstream-watcher-global-config.json)"
+            for s in resolved.sources
         )
 
     def test_repository_config_declares_watcher_policy(self):
