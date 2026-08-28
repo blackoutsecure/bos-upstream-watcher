@@ -22,15 +22,8 @@
 #   UPSTREAM_TOKEN (optional — only for private upstream repos)
 #   GATEKEEPER_AUTHZ_PAT (required for manual dispatch; read:org [+
 #     admin:enterprise when an enterprise-owner check is configured])
-name: '[KICKER] Blackout Secure Universal Gatekeeper'
-run-name: >-
-  Gatekeeper / ${{ github.event_name == 'workflow_dispatch' && inputs.operation || 'full' }} / ${{
-    github.event_name == 'workflow_dispatch'
-      && format('manual by @{0}{1}', github.actor, inputs.force_run && ' (force)' || '')
-      || github.event_name == 'schedule'
-      && (github.event.schedule == '41 3 * * 0' && 'scheduled force rebuild' || 'scheduled')
-      || 'push'
-  }} / ref:${{ github.ref_name }} / cf-env:${{ vars.CLOUDFLARE_DEPLOYMENT_ENV || 'from-.github/bos-universal-config.json' }} / cf-domain:${{ vars.CLOUDFLARE_SITE_URL || 'from-.github/bos-universal-config.json' }}
+name: Blackout Secure Universal Gatekeeper
+run-name: Gatekeeper / ${{ inputs.operation || 'full' }} / ref:${{ github.ref_name }}
 
 "on":
   schedule:
