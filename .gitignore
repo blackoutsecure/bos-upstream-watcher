@@ -41,3 +41,22 @@ __pycache__/
 coverage.xml
 htmlcov/
 # <<< managed-file-sync:coverage_artifacts <<<
+
+# >>> managed-file-sync:python_ecosystem >>>
+**/__pycache__/
+**/.venv/
+**/venv/
+**/env/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/.tox/
+**/.nox/
+**/.coverage
+**/coverage.xml
+**/htmlcov/
+*$py.class
+*.egg
+*.egg-info/
+.eggs/
+# <<< managed-file-sync:python_ecosystem <<<

@@ -36,6 +36,9 @@ rules:
     require-starting-space: false
     min-spaces-from-content: 1
 
+  # Managed-file markers delimit generated blocks under mappings.
+  comments-indentation: disable
+
   # Indentation: 2 spaces, but allow sequences to be flush with parent.
   indentation:
     spaces: 2
