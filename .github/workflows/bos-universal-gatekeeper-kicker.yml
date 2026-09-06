@@ -300,7 +300,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: blackoutsecure/bos-automation-hub
-          ref: ${{ github.ref_name == 'dev' && 'dev' || 'main' }}
+          # Feature and PR refs must use the development hub layout; only the
+          # promoted consumer main branch resolves against hub main.
+          ref: ${{ github.ref_name == 'main' && 'main' || 'dev' }}
           path: hub-runtime
           sparse-checkout: .github/actions/resolve-hub-ref
           sparse-checkout-cone-mode: false
