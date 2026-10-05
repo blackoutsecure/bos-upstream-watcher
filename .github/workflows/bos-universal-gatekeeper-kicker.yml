@@ -294,7 +294,7 @@ jobs:
     runs-on: ${{ fromJSON(startsWith(vars.DEFAULT_RUNNER || 'ubuntu-latest', '[') && (vars.DEFAULT_RUNNER || 'ubuntu-latest') || format('"{0}"', vars.DEFAULT_RUNNER || 'ubuntu-latest')) }}
     timeout-minutes: 2
     outputs:
-      target_ref: ${{ steps.target_ref.outputs.ref }}
+      target_ref: ${{ steps.target_ref.outputs.ref || steps.target_ref_shared.outputs.ref }}
     steps:
       - name: Checkout hub resolver
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -304,11 +304,22 @@ jobs:
           # promoted consumer main branch resolves against hub main.
           ref: ${{ github.ref_name == 'main' && 'main' || 'dev' }}
           path: hub-runtime
-          sparse-checkout: .github/actions/resolve-hub-ref
+          sparse-checkout: |
+            .github/actions/resolve-hub-ref
+            .github/actions/shared/resolve-hub-ref
           sparse-checkout-cone-mode: false
-      - name: Resolve target hub ref
+          persist-credentials: false
+      - name: Resolve target hub ref (flattened layout)
         id: target_ref
+        if: hashFiles('hub-runtime/.github/actions/resolve-hub-ref/action.yml') != ''
         uses: ./hub-runtime/.github/actions/resolve-hub-ref
+        with:
+          event_name: ${{ github.event_name }}
+          ref_name: ${{ github.ref_name }}
+      - name: Resolve target hub ref (nested layout)
+        id: target_ref_shared
+        if: hashFiles('hub-runtime/.github/actions/resolve-hub-ref/action.yml') == ''
+        uses: ./hub-runtime/.github/actions/shared/resolve-hub-ref
         with:
           event_name: ${{ github.event_name }}
           ref_name: ${{ github.ref_name }}
