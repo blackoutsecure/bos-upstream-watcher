@@ -508,8 +508,11 @@ jobs:
   # `action_test` config block.
   action-test:
     name: Action test
-    needs: parse-config
-    if: always() && !cancelled() && needs.parse-config.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.operation == 'action_test'
+    needs: [parse-config, preflight]
+    if: >-
+      always() && !cancelled() && needs.parse-config.result == 'success'
+      && (needs.preflight.result == 'success' || needs.preflight.result == 'skipped')
+      && github.event_name == 'workflow_dispatch' && inputs.operation == 'action_test'
     permissions:
       contents: read
       models: read
@@ -520,8 +523,11 @@ jobs:
   # pipeline that normally carries the `repo_metadata` stage.
   metadata:
     name: Repository metadata
-    needs: parse-config
-    if: always() && !cancelled() && needs.parse-config.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.operation == 'metadata'
+    needs: [parse-config, preflight]
+    if: >-
+      always() && !cancelled() && needs.parse-config.result == 'success'
+      && (needs.preflight.result == 'success' || needs.preflight.result == 'skipped')
+      && github.event_name == 'workflow_dispatch' && inputs.operation == 'metadata'
     permissions:
       contents: read
       models: read
@@ -529,6 +535,7 @@ jobs:
     with:
       description: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.description || '' }}
       description_mode: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.description_mode || 'auto' }}
+      description_fallback: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.description_fallback || '' }}
       homepage: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.homepage || '' }}
       topics: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.topics || '' }}
       generate_topics: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.generate_topics == true }}
@@ -545,8 +552,11 @@ jobs:
   # exists so a maintainer can re-validate on demand from one place.
   marketplace-validate:
     name: Marketplace validation
-    needs: parse-config
-    if: always() && !cancelled() && needs.parse-config.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.operation == 'marketplace_validate'
+    needs: [parse-config, preflight]
+    if: >-
+      always() && !cancelled() && needs.parse-config.result == 'success'
+      && (needs.preflight.result == 'success' || needs.preflight.result == 'skipped')
+      && github.event_name == 'workflow_dispatch' && inputs.operation == 'marketplace_validate'
     permissions:
       contents: read
     uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-universal-marketplace.yml@main
@@ -559,8 +569,11 @@ jobs:
   # branch, tag it, and publish the GitHub Release.
   marketplace-release:
     name: Marketplace release
-    needs: parse-config
-    if: always() && !cancelled() && needs.parse-config.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.operation == 'marketplace_release'
+    needs: [parse-config, preflight]
+    if: >-
+      always() && !cancelled() && needs.parse-config.result == 'success'
+      && (needs.preflight.result == 'success' || needs.preflight.result == 'skipped')
+      && github.event_name == 'workflow_dispatch' && inputs.operation == 'marketplace_release'
     permissions:
       contents: write
       models: read
@@ -578,12 +591,13 @@ jobs:
   # routed by their own jobs further down rather than through this stage.
   release-dev:
     name: Release (dev)
-    needs: parse-config
+    needs: [parse-config, preflight]
     if: >-
       always()
       && !cancelled()
       && needs.parse-config.result == 'success'
-      && github.ref_name == 'dev'
+      && (needs.preflight.result == 'success' || needs.preflight.result == 'skipped')
+      && needs.parse-config.outputs.target_ref == 'dev'
       && (github.event_name != 'workflow_dispatch' || inputs.operation == 'full' || inputs.operation == 'release_only' || inputs.operation == 'security_only')
     permissions:
       contents: write # monitor tracking-file commit + GitHub Release publish
@@ -769,12 +783,13 @@ jobs:
 
   release-main:
     name: Release (main)
-    needs: parse-config
+    needs: [parse-config, preflight]
     if: >-
       always()
       && !cancelled()
       && needs.parse-config.result == 'success'
-      && github.ref_name == 'main'
+      && (needs.preflight.result == 'success' || needs.preflight.result == 'skipped')
+      && needs.parse-config.outputs.target_ref == 'main'
       && (github.event_name != 'workflow_dispatch' || inputs.operation == 'full' || inputs.operation == 'release_only' || inputs.operation == 'security_only')
     permissions:
       contents: write # monitor tracking-file commit + GitHub Release publish
@@ -944,6 +959,8 @@ jobs:
 
       enable_repo_metadata: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.enable == true }}
       repo_metadata_description: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.description || '' }}
+      repo_metadata_description_mode: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.description_mode || 'auto' }}
+      repo_metadata_description_fallback: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.description_fallback || '' }}
       repo_metadata_homepage: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.homepage || '' }}
       repo_metadata_topics: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.topics || '' }}
       repo_metadata_generate_topics: ${{ fromJson(needs.parse-config.outputs.cfg).repo_metadata.generate_topics == true }}
@@ -969,13 +986,13 @@ jobs:
       - release-dev
       - release-main
     if: always() && github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(startsWith(vars.DEFAULT_RUNNER || 'ubuntu-latest', '[') && (vars.DEFAULT_RUNNER || 'ubuntu-latest') || format('"{0}"', vars.DEFAULT_RUNNER || 'ubuntu-latest')) }}
     timeout-minutes: 2
     steps:
       - name: Verify selected route executed
         env:
           OPERATION: ${{ inputs.operation }}
-          TARGET_REF: ${{ github.ref_name }}
+          TARGET_REF: ${{ needs.parse-config.outputs.target_ref }}
           PARSE_RESULT: ${{ needs.parse-config.result }}
           SYNC_DEV_RESULT: ${{ needs.sync-check-dev.result }}
           SYNC_MAIN_RESULT: ${{ needs.sync-check-main.result }}
